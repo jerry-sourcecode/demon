@@ -1,0 +1,119 @@
+import { runFn } from "@/utils/utils";
+import { Time } from "../utils/time";
+import { RoleMap, type Character } from "./model";
+import { useDataStore } from "@/store/value";
+
+export const TagType = {
+    /** 死亡 */
+    dead: "dead",
+    /** 濒死（到期后转为死亡） */
+    dying: "dying",
+    /** 神志不清（中毒/醉酒） */
+    confused: "confused",
+    /** 伪装 */
+    disguise: "disguise",
+    /** 处决免疫（魔鬼代言人） */
+    executionImmune: "executionImmune",
+    farmer: "farmer",
+    recall: "recall",
+    grandson: "grandson",
+    executed: "executed",
+    nemesis: "nemesis"
+} as const;
+
+export type TagType = typeof TagType[keyof typeof TagType];
+
+export interface ITag {
+    type: TagType;
+    /** 过期时间（Time.TIME_FAR_FUTURE 表示永久） */
+    till: Time.TimeNumber;
+    /** 施加者 ID（可选） */
+    source?: number;
+    /** 额外信息（可选） */
+    meta?: unknown;
+}
+
+// ── Tag 交互规则 ──
+
+export interface TagRule {
+    /** 施加前检查，返回 false 阻止该层 */
+    beforeAdd?: (c: Character, tag: ITag) => boolean;
+    /** 施加后副作用 */
+    afterAdd?: (c: Character, tag: ITag) => void;
+    /** 移除前检查，返回 false 阻止移除 */
+    beforeRemove?: (c: Character, tag: ITag) => boolean;
+    /** 移除后副作用 */
+    afterRemove?: (c: Character, tag: ITag) => void;
+}
+
+/** Tag 间通用交互规则 */
+export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
+    [TagType.dying]: {
+        beforeAdd(c) {
+            if (c.hasTag(TagType.dead)) return false;
+            if (c.hasTag(TagType.dying)) return false;
+            return true;
+        },
+        afterRemove(c, tag) {
+            // 濒死到期时转为死亡（避免重复触发：clearTags 也可能调用此回调）
+            const now = useDataStore().time;
+            if (tag.till <= now && !c.hasTag(TagType.dead)) {
+                c.addTag(TagType.dead, { force: (tag.meta as { force?: boolean })?.force ?? false });
+            }
+        },
+    },
+    [TagType.dead]: {
+        beforeAdd(c) {
+            if (c.hasTag(TagType.dead)) return false;
+            return true;
+        },
+        afterAdd(c) {
+            const data = useDataStore();
+            if (!c.isEvil()) {
+                data.reputation -= 2;
+            }
+            c.getTag(TagType.grandson).forEach(tg => {
+                const grandma = data.chars.get(tg.source!);
+                if (grandma?.isAwake()) {
+                    grandma.addTag(TagType.dead);
+                }
+            })
+
+            c.clearTags(TagType.dying);
+            c.clearTags(TagType.farmer);
+            c.clearTags(TagType.grandson);
+            c.clearTags(TagType.executed);
+        },
+        afterRemove(c) {
+            c.resetAllSkills();
+        },
+    },
+    [TagType.executed]: {
+        beforeAdd(c) {
+            if (c.hasTag(TagType.dead)) return false;
+            const now = useDataStore().time;
+            const currentDay = Time.getDay(now);
+            if (c.getTag(TagType.executionImmune).some(t => t.meta?.day === currentDay))
+                return false;
+            return true;
+        },
+        afterAdd(c) {
+            const data = useDataStore();
+            if (!c.isEvil()) {
+                data.reputation -= 3;
+            }
+            c.addTag('dead');
+        }
+    },
+    [TagType.recall]: {
+        afterAdd(c) {
+            c.displayRole = c.getTag(TagType.disguise)[0]?.meta ?? c.role;
+            runFn(RoleMap[c.displayRole]!.onRecall, c);
+        },
+    },
+    [TagType.disguise]: {
+        afterRemove(c) {
+            c.displayRole = c.role;
+        },
+    }
+};

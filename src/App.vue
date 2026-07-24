@@ -1,47 +1,25 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
-
-  <main>
-    <TheWelcome />
-  </main>
+	<NDialogProvider>
+		<n-split class="main" :default-size="0.25">
+			<template #1><Paper /></template>
+			<template #2><PlayerPanel /></template>
+		</n-split>
+	</NDialogProvider>
 </template>
 
+<script setup lang="ts">
+import { NSplit, NDialogProvider } from "naive-ui";
+import Paper from "./components/Paper.vue";
+import PlayerPanel from "./components/PlayerPanel.vue";
+import { onMounted } from "vue";
+import { start } from "@/game.ts";
+
+onMounted(() => start());
+</script>
+
 <style scoped>
-header {
-  line-height: 1.5;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
+.main {
+	height: 100vh;
+	width: 100vw;
 }
 </style>
