@@ -3,38 +3,31 @@
 		v-model:show="showModal"
 		preset="card"
 		:mask-closable="false"
-		style="max-width: 620px; width: auto"
+		style="max-width: 60vw; width: auto"
 		title="可能在场的身份">
-		<div class="sheet-grid">
-			<!-- 镇民 -->
-			<div class="col">
-				<h4>{{ villagerTitle }}</h4>
-				<div class="role-list">
-					<AbilityMd
-						v-for="i in dataStore.villagerMax"
-						:key="'v' + i"
-						:markdown="villagerSlotMd(i)" />
-				</div>
+		<div class="sheet-body">
+			<n-divider title-placement="left">{{ villagerLabel }}</n-divider>
+			<div class="role-row">
+				<AbilityMd
+					v-for="i in villagerSlotCount"
+					:key="'v' + i"
+					:markdown="villagerSlotMd(i)" />
 			</div>
-			<!-- 外来者 -->
-			<div class="col">
-				<h4>{{ outsiderTitle }}</h4>
-				<div class="role-list">
-					<AbilityMd
-						v-for="i in dataStore.outsiderMax"
-						:key="'o' + i"
-						:markdown="outsiderSlotMd(i)" />
-				</div>
+
+			<n-divider title-placement="left">{{ outsiderLabel }}</n-divider>
+			<div class="role-row">
+				<AbilityMd
+					v-for="i in outsiderSlotCount"
+					:key="'o' + i"
+					:markdown="outsiderSlotMd(i)" />
 			</div>
-			<!-- 邪恶 -->
-			<div class="col">
-				<h4>邪恶</h4>
-				<div class="role-list">
-					<AbilityMd
-						v-for="r in dataStore.possibleEvil"
-						:key="r"
-						:markdown="`::${r}::`" />
-				</div>
+
+			<n-divider title-placement="left">邪恶</n-divider>
+			<div class="role-row">
+				<AbilityMd
+					v-for="r in dataStore.possibleEvil"
+					:key="r"
+					:markdown="`::${r}::`" />
 			</div>
 		</div>
 	</n-modal>
@@ -42,7 +35,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { NModal } from "naive-ui";
+import { NModal, NDivider } from "naive-ui";
 import { useDataStore } from "@/store/value";
 import { RoleMap, Faction } from "@/data/model";
 import AbilityMd from "./AbilityMd.vue";
@@ -57,60 +50,68 @@ const showModal = computed({
 
 const dataStore = useDataStore();
 
-const villagerTitle = computed(() =>
-	dataStore.villagerMin === dataStore.villagerMax
-		? `镇民（${dataStore.villagerMin}）`
-		: `镇民（${dataStore.villagerMin}~${dataStore.villagerMax}）`,
-);
-const outsiderTitle = computed(() =>
-	dataStore.outsiderMin === dataStore.outsiderMax
-		? `外来者（${dataStore.outsiderMin}）`
-		: `外来者（${dataStore.outsiderMin}~${dataStore.outsiderMax}）`,
+const knownVillagers = computed(() =>
+	[...dataStore.knownGoodRoles].filter(
+		(r) => RoleMap[r]?.faction === Faction.villager,
+	),
 );
 
+const knownOutsiders = computed(() =>
+	[...dataStore.knownGoodRoles].filter(
+		(r) => RoleMap[r]?.faction === Faction.outsider,
+	),
+);
+
+const villagerSlotCount = computed(() =>
+	Math.max(dataStore.villagerMax, knownVillagers.value.length),
+);
+
+const outsiderSlotCount = computed(() =>
+	Math.max(dataStore.outsiderMax, knownOutsiders.value.length),
+);
+
+const villagerLabel = computed(() => {
+	const range =
+		dataStore.villagerMin === dataStore.villagerMax
+			? `${dataStore.villagerMin}`
+			: `${dataStore.villagerMin}~${dataStore.villagerMax}`;
+	const known = knownVillagers.value.length;
+	if (known > dataStore.villagerMax) return `镇民（${range}，已知 ${known}）`;
+	return `镇民（${range}）`;
+});
+
+const outsiderLabel = computed(() => {
+	const range =
+		dataStore.outsiderMin === dataStore.outsiderMax
+			? `${dataStore.outsiderMin}`
+			: `${dataStore.outsiderMin}~${dataStore.outsiderMax}`;
+	const known = knownOutsiders.value.length;
+	if (known > dataStore.outsiderMax)
+		return `外来者（${range}，已知 ${known}）`;
+	return `外来者（${range}）`;
+});
+
 function villagerSlotMd(i: number): string {
-	const known = [...dataStore.knownGoodRoles].filter(
-		(r) => RoleMap[r]?.faction === Faction.villager,
-	);
-	if (i <= known.length) return `::${known[i - 1]!}::`;
-	return "?";
+	if (i <= knownVillagers.value.length)
+		return `::${knownVillagers.value[i - 1]!}::`;
+	return "";
 }
 
 function outsiderSlotMd(i: number): string {
-	const known = [...dataStore.knownGoodRoles].filter(
-		(r) => RoleMap[r]?.faction === Faction.outsider,
-	);
-	if (i <= known.length) return `::${known[i - 1]!}::`;
-	return "?";
+	if (i <= knownOutsiders.value.length)
+		return `::${knownOutsiders.value[i - 1]!}::`;
+	return "";
 }
 </script>
 
 <style scoped>
-.sheet-grid {
+.sheet-body {
+	min-width: 40vw;
+}
+
+.role-row {
 	display: flex;
-	gap: 24px;
-}
-
-.col {
-	min-width: 140px;
-}
-
-.col h4 {
-	margin: 0 0 8px 0;
-	font-size: 14px;
-	color: #aaa;
-}
-
-.role-list {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.role-tag {
-	font-size: 14px;
-	padding: 2px 6px;
-	border-radius: 4px;
-	background: rgba(255, 255, 255, 0.05);
+	flex-wrap: wrap;
+	gap: 6px;
 }
 </style>

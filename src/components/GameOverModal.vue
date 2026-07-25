@@ -98,9 +98,13 @@
 
 					<!-- 操作按钮 -->
 					<div class="actions">
-						<n-button type="primary" @click="restartGame"
+						<n-button
+							type="primary"
+							@click="restartGame"
+							style="margin-right: 20px"
 							>再来一局</n-button
 						>
+						<n-button @click="exportReplay">导出复盘</n-button>
 					</div>
 				</div>
 			</n-tab-pane>
@@ -132,7 +136,7 @@
 						</template>
 						<div :class="{ 'dead-card': c.hasTag('dead' as any) }">
 							<p v-if="c.hasTag('dead' as any)" class="dead-tag">
-								☠ 已死亡
+								☠ {{ deathCauseLabel(c) }}
 							</p>
 							<p
 								v-if="c.hasTag('disguise' as any)"
@@ -159,7 +163,7 @@
 									:key="event.id"
 									type="info"
 									:title="formatEventTitle(event)"
-									:time="event.timeStr">
+									:time="formatTimeStr(event.time)">
 									<AbilityMd
 										:markdown="formatEventDetail(event)" />
 								</n-timeline-item>
@@ -187,7 +191,12 @@ import {
 	NEmpty,
 } from "naive-ui";
 import { useDataStore } from "@/store/value";
-import { RoleMap, Faction, type Character } from "@/data/model";
+import {
+	RoleMap,
+	Faction,
+	type Character,
+	type DeadReasonType,
+} from "@/data/model";
 import { FACTION_COLORS } from "@/data/keywords";
 import type { GameEvent } from "@/data/gameLog";
 import { Time } from "@/utils/time";
@@ -386,6 +395,23 @@ function factionLabel(c: Character): string {
 	return "未知";
 }
 
+const DEATH_CAUSE: Record<DeadReasonType, string> = {
+	demon: "杀戮",
+	assassin: "刺杀",
+	execute: "处决",
+	moonchild: "诅咒",
+	night: "夜间死亡",
+	other: "死于非命",
+};
+
+function deathCauseLabel(c: Character): string {
+	const deadTag = c.getTag("dead" as any)[0];
+	const type =
+		(deadTag?.meta as { type?: DeadReasonType } | undefined)?.type ??
+		"other";
+	return DEATH_CAUSE[type] ?? "已死亡";
+}
+
 function roleDisplayName(c: Character): string {
 	return RoleMap[c.role]?.display ?? c.role;
 }
@@ -428,6 +454,10 @@ const EVENT_LABELS: Record<string, string> = {
 
 function formatEventTitle(event: GameEvent): string {
 	return EVENT_LABELS[event.type] ?? event.type;
+}
+
+function formatTimeStr(t: Time.TimeNumber): string {
+	return Time.getTimeString(t);
 }
 
 function formatEventDetail(event: GameEvent): string {
@@ -483,6 +513,52 @@ function formatEventDetail(event: GameEvent): string {
 function restartGame() {
 	showModal.value = false;
 	emit("restart");
+}
+
+function exportReplay() {
+	const initRoles: Record<number, string> = {};
+	dataStore.chars.forEach((c, id) => {
+		initRoles[id] = c.role;
+	});
+	const finalChars: Record<
+		number,
+		{
+			role: string;
+			dead: boolean;
+			deathType?: string;
+			disguiseRole?: string;
+		}
+	> = {};
+	dataStore.chars.forEach((c, id) => {
+		const deadTag = c.getTag(TagType.dead)[0];
+		const disguiseTag = c.getTag(TagType.disguise)[0];
+		finalChars[id] = {
+			role: c.role,
+			dead: c.hasTag(TagType.dead),
+			deathType: (deadTag?.meta as any)?.type,
+			disguiseRole: disguiseTag?.meta as string | undefined,
+		};
+	});
+	const data = {
+		version: 1,
+		timestamp: new Date().toISOString(),
+		initRoles,
+		events: dataStore.gameLog,
+		finalState: {
+			reputation: dataStore.reputation,
+			win: props.win,
+			chars: finalChars,
+		},
+	};
+	const blob = new Blob([JSON.stringify(data, null, 2)], {
+		type: "application/json",
+	});
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement("a");
+	a.href = url;
+	a.download = `replay-${new Date().toISOString().slice(0, 10)}.json`;
+	a.click();
+	URL.revokeObjectURL(url);
 }
 </script>
 

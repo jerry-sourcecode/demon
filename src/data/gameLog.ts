@@ -83,7 +83,6 @@ export interface GameEvent {
     id: number;
     type: GameEventType;
     time: Time.TimeNumber;
-    timeStr: string;
     subject: number;
     meta: GameEventMeta;
 }
@@ -104,6 +103,12 @@ export function clearLog(): void {
     _idCounter = 0;
 }
 
+/** 直接设置日志（导入复盘时使用） */
+export function setLog(events: GameEvent[]): void {
+    _log.value = events;
+    _idCounter = events.length > 0 ? Math.max(...events.map(e => e.id)) : 0;
+}
+
 // ── 添加日志 ──
 
 export function addLog(
@@ -116,7 +121,6 @@ export function addLog(
         id: ++_idCounter,
         type,
         time: dataStore.time,
-        timeStr: dataStore.currentTimeString(),
         subject,
         meta,
     };

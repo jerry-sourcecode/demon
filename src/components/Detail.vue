@@ -36,4 +36,9 @@ const disguiseRoleInfo = computed(() =>
 	font-size: large;
 	color: black;
 }
+
+:deep(.n-card-content) {
+	overflow-y: auto;
+	min-height: 0;
+}
 </style>

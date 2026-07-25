@@ -47,8 +47,8 @@ function swapRoles(from: Faction, to: Faction, count: number) {
 export async function start(opts?: {
     villager?: number; outsider?: number; minion?: number; demon?: number;
 }) {
-    const vc = opts?.villager ?? 6;
-    const oc = opts?.outsider ?? 1;
+    const vc = opts?.villager ?? 5;
+    const oc = opts?.outsider ?? 2;
     const mc = opts?.minion ?? 1;
     const dc = opts?.demon ?? 1;
     const dataStore = useDataStore();
@@ -142,10 +142,10 @@ export async function start(opts?: {
 
     const maxExtra = minionAdj.slice(0, mc).reduce((s, x) => s + x, 0) + (demonAdj[0] ?? 0);
     const minExtra = minionAdj.slice(-mc).reduce((s, x) => s + x, 0) + (demonAdj.at(-1) ?? 0);
-    dataStore.villagerMin = vc - maxExtra;
-    dataStore.villagerMax = vc - minExtra;
-    dataStore.outsiderMin = oc + minExtra;
-    dataStore.outsiderMax = oc + maxExtra;
+    dataStore.villagerMin = Math.max(0, vc - maxExtra);
+    dataStore.villagerMax = Math.max(0, vc - minExtra);
+    dataStore.outsiderMin = Math.max(0, oc + minExtra);
+    dataStore.outsiderMax = Math.max(0, oc + maxExtra);
 
     // 记录初始发牌
     const initRoles: Record<number, RoleType> = {};

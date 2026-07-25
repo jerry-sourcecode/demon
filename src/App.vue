@@ -1,6 +1,7 @@
 <template>
 	<NDialogProvider>
-		<n-split class="main" :default-size="0.25">
+		<GameStart v-if="!started" @start="started = true" />
+		<n-split v-else class="main" :default-size="0.25">
 			<template #1><Paper /></template>
 			<template #2><PlayerPanel /></template>
 		</n-split>
@@ -8,13 +9,13 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import { NSplit, NDialogProvider } from "naive-ui";
 import Paper from "./components/Paper.vue";
 import PlayerPanel from "./components/PlayerPanel.vue";
-import { onMounted } from "vue";
-import { start } from "@/game.ts";
+import GameStart from "./components/GameStart.vue";
 
-onMounted(() => start());
+const started = ref(false);
 </script>
 
 <style scoped>

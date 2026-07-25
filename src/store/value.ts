@@ -35,6 +35,7 @@ export const useDataStore = defineStore('data', () => {
     const gameLog: Ref<GameEvent[]> = getLog();
 
     /** 初始配置人数（用于界面显示） */
+    const initCounts = ref({ villager: 6, outsider: 1, minion: 1, demon: 1 });
 
     /** Tab 面板：已揭示的善良身份（含邪恶伪装身份） */
     const knownGoodRoles = ref(new Set<RoleType>());
@@ -104,12 +105,8 @@ export const useDataStore = defineStore('data', () => {
         gameOver.value = false;
         knownGoodRoles.value = new Set();
         possibleEvil.value = [];
-        villagerMin.value = 6;
-        villagerMax.value = 6;
-        outsiderMin.value = 1;
-        outsiderMax.value = 1;
         clearLog();
     }
 
-    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame }
+    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts }
 })

@@ -596,6 +596,38 @@ const roles = {
             c.info.push(`#${ans.id} 是${RoleMap[role].display}。`)
         },
     },
+    Monk: {
+        display: '僧侣',
+        faction: Faction.villager,
+        ability: '每个夜晚*，你要选择除你以外的一名玩家：当晚他不会死亡。',
+        abnormal: {
+            overall: "你仍需要选择玩家，但技能不会生效。",
+        },
+        nightActionPriority() {
+            return 20;
+        },
+        async onTimeChange(c, t) {
+            if (Time.getPhase(t) !== Time.Phase.Night || Time.getDay(t) === 1 || c.displayRole === 'unknown') return;
+
+            const emitter = useEmitter();
+            const chosen = await emitter.emit('select-player', {
+                count: 1,
+                info: '::Monk::：选择一名玩家，他今晚不会死亡。',
+                required: true,
+                filter: (x) => x.id !== c.id,
+            });
+            if (!chosen || chosen.length < 1) return;
+
+            if (!c.isAwake()) {
+                logSkillResolution(c.id, `选择了 #${chosen[0]!.id}，但是由于神志不清，技能未能生效。`);
+                return;
+            }
+
+            const till = Time.makeTime(Time.getDay(t), Time.Phase.Dawn);
+            chosen[0]!.addTag(TagType.protect, { till });
+            logSkillResolution(c.id, `保护了 #${chosen[0]!.id}（::${chosen[0]!.role}::）。`);
+        },
+    },
     Innkeeper: {
         display: '旅店老板',
         faction: Faction.villager,
@@ -611,13 +643,13 @@ const roles = {
             const emitter = useEmitter();
             const chosen = await emitter.emit('select-player', {
                 count: 2,
-                info: '选择两名玩家，他们今晚不会死亡，但其中一人会醉酒。',
+                info: '::Innkeeper::：选择两名玩家，他们今晚不会死亡，但其中一人会醉酒。',
                 required: true,
             });
             if (!chosen || chosen.length < 2) return;
 
             if (!c.isAwake()) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, `选择了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，但是由于神志不清，技能未能生效。`);
                 return;
             }
 
@@ -688,7 +720,7 @@ const roles = {
                         };
                         c.info.push(`对 #${obj?.id} 发动技能，#${obj?.id} 死亡。`)
                         logSkillResolution(c.id, `死亡时选择了 #${obj?.id}（::${obj?.role}::）导致其死亡`);
-                        obj?.addTag('dead');
+                        obj?.addTag('dead', { meta: { type: 'moonchild' } });
                         dataStore.reputation--;
                         logReputationChange(-1, `#${c.id} ::${c.role}:: 选择了一名::kind::`)
                     })
@@ -763,10 +795,10 @@ const roles = {
             const dataStore = useDataStore();
             if (t === Time.makeTime(2, Time.Phase.Night)) {
                 if (c.isEvilAwake()) {
-                    const obj = pickKindPreferVillager(dataStore.charList());
+                    const obj = pickKindPreferVillager(dataStore.charList())[0];
                     obj?.addTag('dying', {
                         till: Time.makeTime(2, Time.Phase.Dawn),
-                        meta: { force: true, type: 'night' },
+                        meta: { force: true, type: 'assassin' },
                     })
                     logSkillResolution(c.id, `刺杀了 #${obj?.id}（::${obj?.role}::）。`);
                 } else {
@@ -853,7 +885,7 @@ const roles = {
             const lastCount = _store.get(c.id) ?? 0;
             if (deadOutsiders > lastCount) {
                 _store.set(c.id, deadOutsiders);
-                const target = pickKindPreferVillager(dataStore.charList());
+                const target = pickKindPreferVillager(dataStore.charList())[0];
                 logSkillResolution(c.id, `由于白天有::outsider::死亡，教父杀死了 #${target?.id}（::${target?.role}::）`)
                 target?.addTag('dying', {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
@@ -881,12 +913,12 @@ const roles = {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
-            const target = pickKindPreferVillager(dataStore.charList());
+            const target = pickKindPreferVillager(dataStore.charList())[0];
             if (target) {
                 logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
                 target.addTag('dying', {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
-                    meta: { type: 'night' },
+                    meta: { type: 'demon' },
                 });
             }
         },
@@ -937,7 +969,7 @@ const roles = {
                     prev.clearTags(TagType.confused);
                     prev.addTag('dying', {
                         till: Time.makeTime(day, Time.Phase.Dawn),
-                        meta: { type: 'night' },
+                        meta: { type: 'demon' },
                     });
                     logSkillResolution(c.id, `#${prevId} 因毒素发作而死亡并恢复健康。`);
                 }
@@ -949,7 +981,7 @@ const roles = {
                 return;
             }
 
-            const target = pickKindPreferVillager(dataStore.charList());
+            const target = pickKindPreferVillager(dataStore.charList())[0];
             if (target) {
                 target.addTag(TagType.confused, { till: Time.FAR_FUTURE });
                 _store.set(c.id, target.id);
@@ -987,18 +1019,14 @@ const roles = {
                 logSkillResolution(c.id, '充能（0→1）。');
             } else {
                 _store.set(c.id, 0);
-                const killed: number[] = [];
-                for (let i = 0; i < 3; i++) {
-                    const target = pickKindPreferVillager(dataStore.charList(), (x) => !x.hasTag(TagType.dying));
-                    if (target) {
-                        target.addTag('dying', {
-                            till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
-                            meta: { type: 'night' },
-                        });
-                        killed.push(target.id);
-                    }
+                const targets = pickKindPreferVillager(dataStore.charList(), 3);
+                for (const target of targets) {
+                    target.addTag('dying', {
+                        till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                        meta: { type: 'demon' },
+                    });
                 }
-                killed.sort();
+                const killed = targets.map(t => t.id).sort();
                 if (killed.length > 0) {
                     logSkillResolution(c.id, `释放充能，杀死了 ${killed.map(id => `#${id}`).join('、')}。`);
                 }
@@ -1068,11 +1096,11 @@ const roles = {
             // 杀戮（保留之夜跳过）
             if (justRetained) return;
 
-            const target = pickKindPreferVillager(dataStore.charList());
+            const target = pickKindPreferVillager(dataStore.charList())[0];
             if (target) {
                 target.addTag('dying', {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
-                    meta: { type: 'night' },
+                    meta: { type: 'demon' },
                 });
                 logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
             }

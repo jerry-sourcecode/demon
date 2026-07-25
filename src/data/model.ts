@@ -13,7 +13,7 @@ export { RoleMap, Faction } from "./roles";
 
 // ── Tag meta 类型系统 ──
 
-export type DeadReasonType = 'other' | 'night' | 'execute';
+export type DeadReasonType = 'other' | 'night' | 'execute' | 'demon' | 'assassin' | 'moonchild';
 
 /** 各 Tag 的 meta 类型映射 */
 interface TagMetaMap {
@@ -214,19 +214,27 @@ export function pickRoles(factions: Faction | Faction[], n: number): RoleType[] 
     return randpick(allRoleKeys(), n, (x) => set.has(RoleMap[x].faction)).items;
 }
 
-/** 随机选一名善良玩家，优先镇民，排除已死亡。若无满足条件的返回 undefined */
-export function pickKindPreferVillager(chars: Character[], filter: (x: Character) => boolean = () => true): Character | undefined {
-    try {
-        return randpick(chars, 1,
-            x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead) && filter(x)
-        ).items[0];
-    } catch {
-        try {
-            return randpick(chars, 1,
-                x => !x.isEvilByEvil() && !x.hasTag(TagType.dead) && filter(x)
-            ).items[0];
-        } catch {
-            return undefined;
+/** 随机选善良玩家，优先镇民，排除已死亡。count 默认 1，返回数组 */
+export function pickKindPreferVillager(chars: Character[], count: number = 1, filter: (x: Character) => boolean = () => true): Character[] {
+    const result: Character[] = [];
+    const used = new Set<number>();
+
+    // 优先村民
+    const villagers = shuffle(chars.filter(x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead) && filter(x)));
+    for (const v of villagers) {
+        if (result.length >= count) break;
+        result.push(v);
+        used.add(v.id);
+    }
+
+    // 不足则取其他善良
+    if (result.length < count) {
+        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isEvilByEvil() && !x.hasTag(TagType.dead) && filter(x)));
+        for (const o of others) {
+            if (result.length >= count) break;
+            result.push(o);
         }
     }
+
+    return result;
 }

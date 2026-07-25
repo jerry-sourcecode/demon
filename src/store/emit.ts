@@ -81,7 +81,7 @@ export const useEmitter = defineStore('signals', () => {
             if (returns !== undefined) ansList.push(returns);
         });
 
-        if (!hasRun) throw Error(`🚨 未找到信号处理器: ${signalName}`);
+        if (!hasRun) console.warn(`🚨 未找到信号处理器: ${signalName}`);
         return ansList;
     }
 
