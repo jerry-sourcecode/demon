@@ -13,10 +13,12 @@ export { RoleMap, Faction } from "./roles";
 
 // ── Tag meta 类型系统 ──
 
+export type DeadReasonType = 'other' | 'night' | 'execute';
+
 /** 各 Tag 的 meta 类型映射 */
 interface TagMetaMap {
-    dead: undefined;
-    dying: { force?: boolean };
+    dead: { type?: DeadReasonType };
+    dying: { force?: boolean, type?: DeadReasonType }
     confused: undefined;
     disguise: RoleType;
     executionImmune: { day: number };
@@ -24,7 +26,8 @@ interface TagMetaMap {
     recall: undefined;
     grandson: undefined;
     executed: undefined;
-    nemesis: undefined
+    nemesis: undefined,
+    protect: undefined
 }
 
 /** Tag 精确类型（discriminated union，meta 随 type 自动收窄） */
@@ -77,7 +80,12 @@ export class Character {
     /** 判断是否为邪恶阵营（含陌客） */
     isEvil(): boolean {
         const fac = RoleMap[this.role]?.faction;
-        return fac === Faction.minion || fac === Faction.demon || this.role === 'recluse';
+        return fac === Faction.minion || fac === Faction.demon || (this.role === 'recluse' && !this.hasTag(TagType.confused));
+    }
+
+    isEvilByEvil(): boolean {
+        const fac = RoleMap[this.role]?.faction;
+        return fac === Faction.minion || fac === Faction.demon;
     }
 
     /** 获取指定类型的所有未过期 Tag（meta 类型自动收窄） */
@@ -213,7 +221,7 @@ export function pickKindPreferVillager(chars: Character[]): Character | undefine
     } catch {
         try {
             return randpick(chars, 1,
-                x => !x.isEvil() && !x.hasTag(TagType.dead)
+                x => !x.isEvilByEvil() && !x.hasTag(TagType.dead)
             ).items[0];
         } catch {
             return undefined;

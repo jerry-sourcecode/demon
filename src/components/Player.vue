@@ -98,6 +98,7 @@ import { Time } from "@/utils/time";
 import { runFn } from "@/utils/utils.ts";
 import AbilityMd from "./AbilityMd.vue";
 import { TagType } from "@/data/tag.ts";
+import { logRecall, logExecute } from "@/data/gameLog";
 
 const dataStore = useDataStore();
 const dialog = useDialog();
@@ -160,8 +161,11 @@ const showRecallBtn = computed(
 
 const showSkillBtn = computed(() => {
 	const role = RoleMap[props.data.displayRole];
+	if (dataStore.gameOver) return false;
 	if (props.data.hasTag(TagType.dead)) return false;
-	if (!dataStore.canAfford(ACTION_COST.skill)) return false;
+	// 只在白天检查行动点，黎明/黄昏不消耗行动点
+	const isDay = Time.getPhase(dataStore.time) === Time.Phase.Day;
+	if (isDay && !dataStore.canAfford(ACTION_COST.skill)) return false;
 	return runFn(role?.canActivateSkill, props.data, dataStore.time) ?? false;
 });
 
@@ -174,13 +178,18 @@ const showExecuteBtn = computed(
 function onRecall() {
 	if (!dataStore.spendActionPoints(ACTION_COST.recall)) return;
 	const c = props.data;
+	const infoBefore = [...c.info];
 	c.addTag(TagType.recall, { till: Time.FAR_FUTURE });
+	const newInfo = c.info.filter((v) => !infoBefore.includes(v));
+	logRecall(c.id, c.id, newInfo.join("；"));
 	emit("action-done");
 }
 
-function onSkill() {
-	if (!dataStore.spendActionPoints(ACTION_COST.skill)) return;
-	RoleMap[props.data.displayRole]?.onActiveSkill?.(props.data);
+async function onSkill() {
+	// 白天消耗行动点，黎明/黄昏不消耗
+	const isDay = Time.getPhase(dataStore.time) === Time.Phase.Day;
+	if (isDay && !dataStore.spendActionPoints(ACTION_COST.skill)) return;
+	await RoleMap[props.data.displayRole]?.onActiveSkill?.(props.data);
 	emit("action-done");
 }
 
@@ -192,6 +201,7 @@ function onExecute() {
 		negativeText: "取消",
 		onPositiveClick: () => {
 			if (!dataStore.spendActionPoints(ACTION_COST.execute)) return;
+			logExecute(0, props.data.id);
 			props.data.addTag(TagType.executed);
 			emit("action-done");
 		},

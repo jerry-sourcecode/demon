@@ -95,6 +95,11 @@
 					@action-done="finishAction" />
 			</div>
 		</div>
+		<!-- 游戏结束弹窗 -->
+		<GameOverModal
+			v-model:show="showGameOverModal"
+			:win="isWin"
+			@restart="onRestart" />
 	</div>
 </template>
 
@@ -110,11 +115,13 @@ import {
 } from "vue";
 import Player from "./Player.vue";
 import { NCard, NButton, NStatistic, NNumberAnimation } from "naive-ui";
-import { useDataStore } from "@/store/value.ts";
+import { ACTION_COST, useDataStore } from "@/store/value.ts";
 import { useEmitter } from "@/store/emit.ts";
-import { Faction, RoleMap, type Character } from "@/data/model";
+import { Faction, type Character } from "@/data/model";
 import { UniqueQueue } from "@/utils/utils";
 import AbilityMd from "./AbilityMd.vue";
+import GameOverModal from "./GameOverModal.vue";
+import { start } from "@/game.ts";
 
 const dataStore = useDataStore();
 const prevReputation = ref(dataStore.reputation);
@@ -133,19 +140,13 @@ watch(
 );
 
 const factionCounts = computed(() => {
-	const keys = [
-		Faction.villager,
-		Faction.outsider,
-		Faction.minion,
-		Faction.demon,
-	] as const;
-	const counts: Record<string, number> = {};
-	keys.forEach((k) => (counts[k] = 0));
-	dataStore.chars.forEach((c) => {
-		const fac = RoleMap[c.role]?.faction;
-		if (fac && fac in counts) counts[fac]!++;
-	});
-	return keys.map((k) => ({ key: k, count: counts[k] }));
+	const { villager, outsider, minion, demon } = dataStore.initCounts;
+	return [
+		{ key: Faction.villager, count: villager },
+		{ key: Faction.outsider, count: outsider },
+		{ key: Faction.minion, count: minion },
+		{ key: Faction.demon, count: demon },
+	];
 });
 
 // 容器实际尺寸（由 ResizeObserver 驱动）
@@ -224,13 +225,31 @@ emitter.on("game-start", () => {
 	}, 100);
 });
 
+// ── 游戏结束 ──
+
+const showGameOverModal = ref(false);
+const isWin = ref(false);
+
+emitter.on("game-end", (win) => {
+	dataStore.gameOver = true;
+	isWin.value = win;
+	setTimeout(() => {
+		showGameOverModal.value = true;
+	}, 500);
+});
+
+function onRestart() {
+	dataStore.resetGame();
+	start();
+}
+
 const waitRes: Ref<((value: void | PromiseLike<void>) => void) | null> =
 	ref(null);
 
 function startUserAction() {
 	midDoneBtn.value = true;
 	midDisplay.value = true;
-	midText.value = `现在是${dataStore.currentTimeString()}，剩余行动力 ${dataStore.actionPoints}，玩家可以进行行动。`;
+	midText.value = `现在是${dataStore.currentTimeString()}，玩家可以进行行动。`;
 }
 
 emitter.on("wait-for-action", () => {
@@ -305,6 +324,7 @@ function confirmSelection() {
 }
 
 function cancelSelection() {
+	dataStore.spendActionPoints(-ACTION_COST.skill);
 	selecting.value = false;
 	selectResolve?.(null);
 	selectEnd();

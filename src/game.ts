@@ -4,16 +4,45 @@ import { useDataStore } from "./store/value";
 import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
 import { TagType } from "./data/tag";
-export async function start() {
+import { logGameStart, logPhaseChange, logGameEnd } from "./data/gameLog";
+
+/** 检查游戏是否结束 */
+function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: ReturnType<typeof useEmitter>): boolean {
+    // 圣徒等角色可能已通过 onExecuted 直接触发 game-end，同步给循环
+    if (dataStore.gameOver) return true;
+    const evilAlive = dataStore.evilAlive;
+    if (evilAlive.length === 0) {
+        dataStore.gameOver = true;
+        logGameEnd(true);
+        emitter.emit('game-end', true);
+        return true;
+    }
+    if (dataStore.reputation <= 0) {
+        dataStore.reputation = 0;
+        dataStore.gameOver = true;
+        logGameEnd(false);
+        emitter.emit('game-end', false);
+        return true;
+    }
+    return false;
+}
+export async function start(opts?: {
+    villager?: number; outsider?: number; minion?: number; demon?: number;
+}) {
+    const vc = opts?.villager ?? 6;
+    const oc = opts?.outsider ?? 1;
+    const mc = opts?.minion ?? 1;
+    const dc = opts?.demon ?? 1;
     const dataStore = useDataStore();
 
+    dataStore.initCounts = { villager: vc, outsider: oc, minion: mc, demon: dc };
     dataStore.reputation = 15;
 
     let player: RoleType[] = [];
-    player.push(...pickRoles(Faction.villager, 6));
-    player.push(...pickRoles(Faction.outsider, 1));
-    player.push(...pickRoles(Faction.minion, 1));
-    player.push(...pickRoles(Faction.demon, 1));
+    player.push(...pickRoles(Faction.villager, vc), 'soldier', 'innkeeper');
+    player.push(...pickRoles(Faction.outsider, oc));
+    player.push(...pickRoles(Faction.minion, mc));
+    player.push(...pickRoles(Faction.demon, dc));
     player = shuffle(player);
 
     let idx = 0;
@@ -57,6 +86,11 @@ export async function start() {
         }
     }
 
+    // 记录初始发牌
+    const initRoles: Record<number, RoleType> = {};
+    dataStore.chars.forEach((c, id) => { initRoles[id] = c.role; });
+    logGameStart(initRoles);
+
     emitter.emit('game-start');
 
     dataStore.chars.forEach(x => {
@@ -65,8 +99,16 @@ export async function start() {
         if (tg) runFn(RoleMap[tg.meta].onStart, x)
     });
 
-    while (dataStore.time <= 51) {
+    let gameEnded = false;
+    while (!gameEnded) {
         dataStore.nextTime();
+        logPhaseChange();
+
+        if (checkGameEnd(dataStore, emitter)) {
+            gameEnded = true;
+            break;
+        }
+
         if (Time.getPhase(dataStore.time) === Time.Phase.Night) {
             const order: { prio: number, c: Character, role: RoleType }[] = [];
             dataStore.chars.forEach(x => {
@@ -80,9 +122,9 @@ export async function start() {
                 }
             })
             order.sort((a, b) => b.prio - a.prio);
-            order.forEach(x => {
-                runFn(RoleMap[x.role].onTimeChange, x.c, dataStore.time);
-            })
+            for (const x of order) {
+                await runFn(RoleMap[x.role].onTimeChange, x.c, dataStore.time);
+            }
         } else {
             dataStore.chars.forEach(x => {
                 if (x.hasTag(TagType.dead)) return;
@@ -92,8 +134,13 @@ export async function start() {
             })
             if (Time.getPhase(dataStore.time) === Time.Phase.Day) {
                 dataStore.resetActionPoints();
-                while (dataStore.actionPoints > 0) {
+                while (dataStore.actionPoints > 0 && !dataStore.gameOver) {
                     await emitter.emit('wait-for-action')
+                    // 每次操作后立即检查胜负
+                    if (checkGameEnd(dataStore, emitter)) {
+                        gameEnded = true;
+                        break;
+                    }
                 }
             } else {
                 let needMove = false;
@@ -103,11 +150,22 @@ export async function start() {
                         needMove = true;
                     }
                 })
-                if (needMove) {
+                if (needMove && !dataStore.gameOver) {
                     await emitter.emit('wait-for-action')
+                    // 操作后立即检查胜负
+                    if (checkGameEnd(dataStore, emitter)) {
+                        gameEnded = true;
+                    }
                 }
             }
         }
-        await sleep(1);
+
+        // 每轮结束再次检查（处决可能导致立即结束）
+        if (!gameEnded) {
+            if (checkGameEnd(dataStore, emitter)) {
+                gameEnded = true;
+            }
+        }
+        await sleep(0.3);
     }
 }

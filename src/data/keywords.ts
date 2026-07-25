@@ -26,7 +26,7 @@ function buildRoleKeywords(): Record<string, KeywordEntry> {
     for (const [key, role] of Object.entries(RoleMap)) {
         entries[key] = {
             display: role.display,
-            desc: role.ability,
+            desc: dedent(role.ability),
             color: FACTION_COLORS[role.faction] || "#4fc3f7",
         };
     }
@@ -125,9 +125,9 @@ export const KEYWORD_DICT: Record<string, KeywordEntry> = {
 /** markdown-it 实例（复用，避免重复创建） */
 const md = new MarkdownIt({ html: true });
 
-/** 转义 HTML 属性值 */
+/** 转义 HTML 属性值，同时去除换行防止属性断裂 */
 function escapeAttr(s: string): string {
-    return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, " ");
 }
 
 /**

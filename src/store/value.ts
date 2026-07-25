@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
-import { RoleMap, type Character } from '../data/model'
-import { ref, type Ref } from 'vue';
+import { RoleMap, Faction, type Character } from '../data/model'
+import { ref, type Ref, computed } from 'vue';
 import { Time } from '../utils/time';
+import { TagType } from '../data/tag';
+import { gameLog as getLog, clearLog, type GameEvent } from '../data/gameLog';
 
 export const ACTION_COST = {
     skill: 2,
@@ -18,6 +20,22 @@ export const useDataStore = defineStore('data', () => {
 
     const actionPoints = ref(10);
     const maxActionPoints = 10;
+
+    const gameOver = ref(false);
+
+    /** 尚存活的真正邪恶角色（仅恶魔和爪牙，陌客不算） */
+    const evilAlive = computed(() =>
+        [...chars.value.values()].filter(c => {
+            const fac = RoleMap[c.role]?.faction;
+            return (fac === Faction.demon || fac === Faction.minion) && !c.hasTag(TagType.dead);
+        })
+    );
+
+    /** 游戏日志（复盘数据） */
+    const gameLog: Ref<GameEvent[]> = getLog();
+
+    /** 初始配置人数（用于界面显示，不受男爵/教父影响） */
+    const initCounts = ref({ villager: 6, outsider: 1, minion: 1, demon: 1 });
 
     function nextTime() {
         time.value = Time.nextTime(time.value);
@@ -50,5 +68,14 @@ export const useDataStore = defineStore('data', () => {
         actionPoints.value = maxActionPoints;
     }
 
-    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints }
+    function resetGame() {
+        chars.value = new Map();
+        time.value = Time.NOT_STARTED;
+        reputation.value = 0;
+        actionPoints.value = maxActionPoints;
+        gameOver.value = false;
+        clearLog();
+    }
+
+    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, initCounts, resetGame }
 })

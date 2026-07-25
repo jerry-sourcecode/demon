@@ -1,7 +1,8 @@
 import { runFn } from "@/utils/utils";
 import { Time } from "../utils/time";
-import { RoleMap, type Character } from "./model";
+import { RoleMap, type Character, type DeadReasonType } from "./model";
 import { useDataStore } from "@/store/value";
+import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution } from "./gameLog";
 
 export const TagType = {
     /** 死亡 */
@@ -18,7 +19,9 @@ export const TagType = {
     recall: "recall",
     grandson: "grandson",
     executed: "executed",
-    nemesis: "nemesis"
+    nemesis: "nemesis",
+    /** 旅店老板保护（当夜免疫死亡） */
+    protect: "protect"
 } as const;
 
 export type TagType = typeof TagType[keyof typeof TagType];
@@ -52,29 +55,53 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
         beforeAdd(c) {
             if (c.hasTag(TagType.dead)) return false;
             if (c.hasTag(TagType.dying)) return false;
+            if (c.hasTag(TagType.protect)) {
+                logSkillResolution(c.id, `因为技能没有死亡。`)
+                return false
+            };
             return true;
         },
         afterRemove(c, tag) {
             // 濒死到期时转为死亡（避免重复触发：clearTags 也可能调用此回调）
             const now = useDataStore().time;
             if (tag.till <= now && !c.hasTag(TagType.dead)) {
-                c.addTag(TagType.dead, { force: (tag.meta as { force?: boolean })?.force ?? false });
+                c.addTag(TagType.dead,
+                    {
+                        force: (tag.meta as { force?: boolean })?.force ?? false,
+                        meta: {
+                            type: (tag.meta as { type?: any })?.type ?? 'other'
+                        }
+                    }
+                );
             }
-        },
+        }
     },
     [TagType.dead]: {
         beforeAdd(c) {
             if (c.hasTag(TagType.dead)) return false;
             return true;
         },
-        afterAdd(c) {
+        afterAdd(c, tg) {
             const data = useDataStore();
+            const repBefore = data.reputation;
+            const type = (tg.meta as { type?: DeadReasonType })?.type ?? 'other';
+            let repDelta = 0;
+            logDeath(c.id, type);
             if (!c.isEvil()) {
                 data.reputation -= 2;
+                repDelta = data.reputation - repBefore;
+                if (type === 'execute') {
+                    repDelta -= 3;
+                    logReputationChange(repDelta, `#${c.id} ::${c.role}:: 被处决`);
+                } else {
+                    logReputationChange(repDelta, `#${c.id} ::${c.role}:: 死于非命`);
+                }
             }
+
             c.getTag(TagType.grandson).forEach(tg => {
                 const grandma = data.chars.get(tg.source!);
                 if (grandma?.isAwake()) {
+                    logSkillResolution(grandma.id, `因为过度思念而殉情。`)
                     grandma.addTag(TagType.dead);
                 }
             })
@@ -93,8 +120,12 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             if (c.hasTag(TagType.dead)) return false;
             const now = useDataStore().time;
             const currentDay = Time.getDay(now);
-            if (c.getTag(TagType.executionImmune).some(t => t.meta?.day === currentDay))
+            if (c.getTag(TagType.executionImmune).some(t => t.meta?.day === currentDay)) {
+                logSkillResolution(c.id, `被处决成功但没有死亡。`)
                 return false;
+            }
+            // 调用角色的 onExecuted 钩子（如骑士免疫、圣徒结束游戏）
+            if (runFn(RoleMap[c.role]?.onExecuted, c) === false) return false;
             return true;
         },
         afterAdd(c) {
@@ -102,7 +133,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             if (!c.isEvil()) {
                 data.reputation -= 3;
             }
-            c.addTag('dead');
+            c.addTag('dead', { meta: { type: 'execute' } });
         }
     },
     [TagType.recall]: {
@@ -112,7 +143,11 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
         },
     },
     [TagType.disguise]: {
+        afterAdd(c, tag) {
+            logDisguiseChange(c.id, undefined, tag.meta as any);
+        },
         afterRemove(c) {
+            logDisguiseChange(c.id, c.role, undefined);
             c.displayRole = c.role;
         },
     }
