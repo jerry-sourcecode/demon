@@ -27,7 +27,8 @@ interface TagMetaMap {
     grandson: undefined;
     executed: undefined;
     nemesis: undefined,
-    protect: undefined
+    protect: undefined,
+    retained: undefined
 }
 
 /** Tag 精确类型（discriminated union，meta 随 type 自动收窄） */
@@ -80,7 +81,7 @@ export class Character {
     /** 判断是否为邪恶阵营（含陌客） */
     isEvil(): boolean {
         const fac = RoleMap[this.role]?.faction;
-        return fac === Faction.minion || fac === Faction.demon || (this.role === 'recluse' && !this.hasTag(TagType.confused));
+        return fac === Faction.minion || fac === Faction.demon || (this.role === 'Recluse' && !this.hasTag(TagType.confused));
     }
 
     isEvilByEvil(): boolean {
@@ -107,10 +108,11 @@ export class Character {
         const rule = TAG_RULES[type];
         for (let i = 0; i < count; i++) {
             const tg = { type, till, source: opts?.source, meta: opts?.meta } as TypedTag<T>;
-            if (!force && roleDef.onTagAdd?.(this, tg) === false) continue;
+            if (!force && roleDef.beforeTagAdd?.(this, tg) === false) continue;
             if (!force && rule?.beforeAdd?.(this, tg) === false) continue;
             this.tags.push(tg);
             rule?.afterAdd?.(this, tg);
+            roleDef.afterTagAdd?.(this, tg);
         }
     }
 
@@ -213,15 +215,15 @@ export function pickRoles(factions: Faction | Faction[], n: number): RoleType[] 
 }
 
 /** 随机选一名善良玩家，优先镇民，排除已死亡。若无满足条件的返回 undefined */
-export function pickKindPreferVillager(chars: Character[]): Character | undefined {
+export function pickKindPreferVillager(chars: Character[], filter: (x: Character) => boolean = () => true): Character | undefined {
     try {
         return randpick(chars, 1,
-            x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead)
+            x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead) && filter(x)
         ).items[0];
     } catch {
         try {
             return randpick(chars, 1,
-                x => !x.isEvilByEvil() && !x.hasTag(TagType.dead)
+                x => !x.isEvilByEvil() && !x.hasTag(TagType.dead) && filter(x)
             ).items[0];
         } catch {
             return undefined;

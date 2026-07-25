@@ -28,7 +28,6 @@ interface PhaseChangeMeta {
 
 interface RecallMeta {
     target: number;
-    revealedInfo: string;
 }
 
 interface ExecuteMeta {
@@ -58,6 +57,8 @@ interface SkillResolutionMeta {
     confused: boolean;
     /** 伪装身份（如有） */
     disguiseRole?: RoleType;
+    /** 技能结算时主体的角色（避免后续角色变更影响回放） */
+    role: RoleType;
 }
 
 interface GameEndMeta {
@@ -135,12 +136,12 @@ export function logPhaseChange(): void {
     });
 }
 
-export function logRecall(subject: number, target: number, info: string): void {
-    addLog('recall', subject, { target, revealedInfo: info });
+export function logRecall(target: number): void {
+    addLog('recall', target, { target });
 }
 
-export function logExecute(subject: number, target: number): void {
-    addLog('execute', subject, { target });
+export function logExecute(target: number): void {
+    addLog('execute', 0, { target });
 }
 
 export function logDeath(subject: number, cause: 'execute' | 'night' | 'other'): void {
@@ -163,7 +164,7 @@ export function logSkillResolution(subject: number, detail: string): void {
     const disguiseTg = c?.getTag('disguise' as any)[0];
     const disguised = !!disguiseTg;
     const disguiseRole = disguiseTg?.meta as RoleType | undefined;
-    addLog('skillResolution', subject, { detail, disguised, confused, disguiseRole });
+    addLog('skillResolution', subject, { detail, disguised, confused, disguiseRole, role: c?.role ?? 'unknown' as RoleType });
 }
 
 export function logGameEnd(win: boolean): void {

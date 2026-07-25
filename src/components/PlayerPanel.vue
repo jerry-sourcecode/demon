@@ -100,6 +100,8 @@
 			v-model:show="showGameOverModal"
 			:win="isWin"
 			@restart="onRestart" />
+		<!-- Tab 身份参考面板 -->
+		<RoleSheet v-model:show="showRoleSheet" />
 	</div>
 </template>
 
@@ -121,6 +123,7 @@ import { Faction, type Character } from "@/data/model";
 import { UniqueQueue } from "@/utils/utils";
 import AbilityMd from "./AbilityMd.vue";
 import GameOverModal from "./GameOverModal.vue";
+import RoleSheet from "./RoleSheet.vue";
 import { start } from "@/game.ts";
 
 const dataStore = useDataStore();
@@ -140,10 +143,18 @@ watch(
 );
 
 const factionCounts = computed(() => {
-	const { villager, outsider, minion, demon } = dataStore.initCounts;
+	const { minion, demon } = dataStore.initCounts;
+	const vCount =
+		dataStore.villagerMin === dataStore.villagerMax
+			? `${dataStore.villagerMin}`
+			: `${dataStore.villagerMin}~${dataStore.villagerMax}`;
+	const oCount =
+		dataStore.outsiderMin === dataStore.outsiderMax
+			? `${dataStore.outsiderMin}`
+			: `${dataStore.outsiderMin}~${dataStore.outsiderMax}`;
 	return [
-		{ key: Faction.villager, count: villager },
-		{ key: Faction.outsider, count: outsider },
+		{ key: Faction.villager, count: vCount },
+		{ key: Faction.outsider, count: oCount },
 		{ key: Faction.minion, count: minion },
 		{ key: Faction.demon, count: demon },
 	];
@@ -217,6 +228,23 @@ onMounted(() => {
 		});
 		resizeObserver.observe(ringContainer.value);
 	}
+});
+
+// ── Tab 身份面板 ──
+
+const showRoleSheet = ref(false);
+
+function onKeyDown(e: KeyboardEvent) {
+	if (e.key === "Tab" && !e.repeat) {
+		e.preventDefault();
+		showRoleSheet.value = !showRoleSheet.value;
+	}
+}
+
+document.addEventListener("keydown", onKeyDown);
+
+onUnmounted(() => {
+	document.removeEventListener("keydown", onKeyDown);
 });
 
 emitter.on("game-start", () => {

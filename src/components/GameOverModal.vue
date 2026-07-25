@@ -120,9 +120,12 @@
 							</span>
 						</template>
 						<template #header-extra>
-							<n-tag v-if="c.isEvil()" type="error" size="tiny">{{
-								factionLabel(c)
-							}}</n-tag>
+							<n-tag
+								v-if="c.isEvilByEvil()"
+								type="error"
+								size="tiny"
+								>{{ factionLabel(c) }}</n-tag
+							>
 							<n-tag v-else type="info" size="tiny">{{
 								factionLabel(c)
 							}}</n-tag>
@@ -156,9 +159,7 @@
 									:key="event.id"
 									type="info"
 									:title="formatEventTitle(event)"
-									:time="
-										event.timeStr.replace(/第\d+天/, '')
-									">
+									:time="event.timeStr">
 									<AbilityMd
 										:markdown="formatEventDetail(event)" />
 								</n-timeline-item>
@@ -445,7 +446,7 @@ function formatEventDetail(event: GameEvent): string {
 		case "phaseChange":
 			return `进入${meta.phase}`;
 		case "recall":
-			return `${prefix} 进行了回忆${meta.revealedInfo ? `：${meta.revealedInfo}` : ""}`;
+			return `${prefix} 进行了回忆`;
 		case "execute":
 			return `玩家处决了 #${meta.target}`;
 		case "death": {
@@ -460,8 +461,11 @@ function formatEventDetail(event: GameEvent): string {
 		case "reputationChange":
 			return `声望 ${meta.delta > 0 ? "+" : ""}${meta.delta}：${meta.reason}，当前 ${meta.newValue}`;
 		case "skillResolution": {
-			const subjC = dataStore.chars.get(event.subject);
-			let sp = subjC ? `#${subjC.id} ::${subjC.role}::` : "系统";
+			const displayRole =
+				(meta as any).role ??
+				dataStore.chars.get(event.subject)?.role ??
+				"unknown";
+			let sp = `#${event.subject} ::${displayRole}::`;
 			if (meta.disguised && meta.disguiseRole)
 				sp += `（伪装：::${meta.disguiseRole}::）`;
 			if (meta.confused) sp += `（::confused::）`;

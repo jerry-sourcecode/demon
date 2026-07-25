@@ -98,7 +98,7 @@ import { Time } from "@/utils/time";
 import { runFn } from "@/utils/utils.ts";
 import AbilityMd from "./AbilityMd.vue";
 import { TagType } from "@/data/tag.ts";
-import { logRecall, logExecute } from "@/data/gameLog";
+import { logRecall, logExecute, logSkillResolution } from "@/data/gameLog";
 
 const dataStore = useDataStore();
 const dialog = useDialog();
@@ -179,9 +179,13 @@ function onRecall() {
 	if (!dataStore.spendActionPoints(ACTION_COST.recall)) return;
 	const c = props.data;
 	const infoBefore = [...c.info];
+	logRecall(c.id);
 	c.addTag(TagType.recall, { till: Time.FAR_FUTURE });
 	const newInfo = c.info.filter((v) => !infoBefore.includes(v));
-	logRecall(c.id, c.id, newInfo.join("；"));
+	if (newInfo.length !== 0)
+		logSkillResolution(c.id, `在回忆时得知：${newInfo.join("；")}`);
+	// 回忆后揭示身份到 Tab 面板
+	dataStore.addKnownGoodRole(c.displayRole);
 	emit("action-done");
 }
 
@@ -201,7 +205,7 @@ function onExecute() {
 		negativeText: "取消",
 		onPositiveClick: () => {
 			if (!dataStore.spendActionPoints(ACTION_COST.execute)) return;
-			logExecute(0, props.data.id);
+			logExecute(props.data.id);
 			props.data.addTag(TagType.executed);
 			emit("action-done");
 		},

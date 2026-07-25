@@ -21,7 +21,9 @@ export const TagType = {
     executed: "executed",
     nemesis: "nemesis",
     /** 旅店老板保护（当夜免疫死亡） */
-    protect: "protect"
+    protect: "protect",
+    /** 亡骨魔保留（死亡爪牙仍参与夜间行动） */
+    retained: "retained"
 } as const;
 
 export type TagType = typeof TagType[keyof typeof TagType];

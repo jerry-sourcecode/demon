@@ -26,6 +26,24 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
     }
     return false;
 }
+/** 将 count 个随机 factionA 角色替换为不在场的 factionB 角色 */
+function swapRoles(from: Faction, to: Faction, count: number) {
+    const dataStore = useDataStore();
+    const allTo = allRoleKeys().filter(k => RoleMap[k].faction === to);
+    const presentTo = new Set(
+        dataStore.charList().filter(c => c.getRoleDetail().faction === to).map(c => c.role)
+    );
+    let absent = allTo.filter(r => !presentTo.has(r));
+    const targets = randpick(
+        dataStore.charList().filter(c => c.getRoleDetail().faction === from), count
+    ).items;
+    for (const t of targets) {
+        if (absent.length === 0) break;
+        t.role = randpick(absent).items[0]!;
+        absent = absent.filter(r => r !== t.role);
+    }
+}
+
 export async function start(opts?: {
     villager?: number; outsider?: number; minion?: number; demon?: number;
 }) {
@@ -39,19 +57,19 @@ export async function start(opts?: {
     dataStore.reputation = 15;
 
     let player: RoleType[] = [];
-    player.push(...pickRoles(Faction.villager, vc), 'soldier', 'innkeeper');
+    player.push(...pickRoles(Faction.villager, vc));
     player.push(...pickRoles(Faction.outsider, oc));
     player.push(...pickRoles(Faction.minion, mc));
     player.push(...pickRoles(Faction.demon, dc));
     player = shuffle(player);
 
     let idx = 0;
-    let disguiseRoleList = [...pickRoles(Faction.villager, 4), ...pickRoles(Faction.outsider, 1)];
+    let disguiseRoleList = [...pickRoles(Faction.villager, 5), ...randpick(allRoleKeys(), 2, (x) => RoleMap[x].faction === Faction.outsider && x !== 'Drunk').items]
     player.forEach(x => {
         idx++;
         const c = new Character(idx, x);
         dataStore.chars.set(idx, c);
-        if (c.isEvil() && c.role !== 'recluse') {
+        if (c.isEvil() && c.role !== 'Recluse') {
             const { items, indices } = randpick(disguiseRoleList)
             c.addTag(TagType.disguise, { meta: items[0]! });
             disguiseRoleList.splice(indices[0]!, 1);
@@ -60,31 +78,74 @@ export async function start(opts?: {
 
     const emitter = useEmitter();
 
-    // 教父/男爵：将 n 位随机镇民替换为不在场外来者
-    const godFatherCount = dataStore.charList().filter(c => c.role === 'godFather').length;
-    const baronCount = dataStore.charList().filter(c => c.role === 'baron').length;
-    const replacerCount = godFatherCount + baronCount * 2;
-    if (replacerCount > 0) {
-        const allOutsiders = allRoleKeys().filter(k => RoleMap[k].faction === Faction.outsider);
-        const presentOutsiders = new Set(
-            dataStore.charList()
-                .filter(c => c.getRoleDetail().faction === Faction.outsider)
-                .map(c => c.role)
-        );
-        let absent = allOutsiders.filter(r => !presentOutsiders.has(r));
-
-        const villagerTargets = randpick(
-            dataStore.charList().filter(c => c.getRoleDetail().faction === Faction.villager),
-            replacerCount
-        ).items;
-
-        for (const target of villagerTargets) {
-            if (absent.length === 0) break;
-            const newRole = randpick(absent).items[0]!;
-            target.role = newRole;
-            absent = absent.filter(r => r !== newRole);
-        }
+    // ── 定版：根据角色的 onAdjustCounts 调整外来者/镇民数量 ──
+    const netCounts = { villager: vc, outsider: oc };
+    dataStore.chars.forEach(c => {
+        runFn(RoleMap[c.role]?.onAdjustCounts, netCounts);
+    });
+    const delta = netCounts.outsider - oc;
+    if (delta > 0) {
+        swapRoles(Faction.villager, Faction.outsider, delta);
+    } else if (delta < 0) {
+        swapRoles(Faction.outsider, Faction.villager, -delta);
     }
+
+    // ── Tab 面板初始化 ──
+
+    // 可能的邪恶身份：恶魔 + 1个不在场恶魔 + 真实爪牙 + 1个不在场爪牙
+    const allMinionKeys = allRoleKeys().filter(k => RoleMap[k].faction === Faction.minion);
+    const allDemonKeys = allRoleKeys().filter(k => RoleMap[k].faction === Faction.demon);
+    let actualEvil = dataStore.charList()
+        .filter(c => c.isEvilByEvil())
+        .map(c => c.role);
+
+    // 混淆恶魔
+    const absentDemon = allDemonKeys.filter(k => !actualEvil.includes(k));
+    if (absentDemon.length > 0) {
+        actualEvil.push(randpick(absentDemon, 1).items[0]!);
+    }
+
+    // 混淆爪牙
+    const absentMinion = allMinionKeys.filter(k => !actualEvil.includes(k));
+    if (absentMinion.length > 0) {
+        actualEvil.push(randpick(absentMinion, 1).items[0]!);
+    }
+
+    actualEvil = shuffle(actualEvil);
+    actualEvil.sort((a, b) => {
+        if (RoleMap[a].faction === RoleMap[b].faction) {
+            return a < b ? 1 : -1;
+        } else {
+            if (RoleMap[a].faction === Faction.minion) return -1;
+            return 1;
+        }
+    })
+    dataStore.initPossibleEvil(actualEvil);
+
+    // 计算范围
+    // 爪牙：mc 个中取最大/最小 mc 个调整量之和
+    const minionAdj: number[] = [];
+    const demonAdj: number[] = [];
+    actualEvil.forEach(role => {
+        const adj = { villager: vc, outsider: oc };
+        runFn(RoleMap[role]?.onAdjustCounts, adj);
+        const delta = adj.outsider - oc;
+        const fac = RoleMap[role]?.faction;
+        if (fac === Faction.minion) {
+            minionAdj.push(delta);
+        } else if (fac === Faction.demon) {
+            demonAdj.push(delta);
+        }
+    });
+    minionAdj.sort((a, b) => b - a);
+    demonAdj.sort((a, b) => b - a);
+
+    const maxExtra = minionAdj.slice(0, mc).reduce((s, x) => s + x, 0) + (demonAdj[0] ?? 0);
+    const minExtra = minionAdj.slice(-mc).reduce((s, x) => s + x, 0) + (demonAdj.at(-1) ?? 0);
+    dataStore.villagerMin = vc - maxExtra;
+    dataStore.villagerMax = vc - minExtra;
+    dataStore.outsiderMin = oc + minExtra;
+    dataStore.outsiderMax = oc + maxExtra;
 
     // 记录初始发牌
     const initRoles: Record<number, RoleType> = {};
@@ -112,7 +173,7 @@ export async function start(opts?: {
         if (Time.getPhase(dataStore.time) === Time.Phase.Night) {
             const order: { prio: number, c: Character, role: RoleType }[] = [];
             dataStore.chars.forEach(x => {
-                if (x.hasTag(TagType.dead)) return;
+                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
                 let prio = runFn(x.getRoleDetail().nightActionPriority, x);
                 if (prio) order.push({ prio, c: x, role: x.role });
                 if (x.hasTag(TagType.disguise)) {
@@ -127,7 +188,7 @@ export async function start(opts?: {
             }
         } else {
             dataStore.chars.forEach(x => {
-                if (x.hasTag(TagType.dead)) return;
+                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
                 runFn(RoleMap[x.displayRole].onTimeChange, x, dataStore.time);
                 const tg = x.getTag(TagType.disguise)[0];
                 if (tg) runFn(RoleMap[tg.meta].onTimeChange, x, dataStore.time);
@@ -145,7 +206,7 @@ export async function start(opts?: {
             } else {
                 let needMove = false;
                 dataStore.chars.forEach(x => {
-                    if (x.hasTag(TagType.dead)) return;
+                    if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
                     if (runFn(RoleMap[x.displayRole].canActivateSkill, x, dataStore.time)) {
                         needMove = true;
                     }
