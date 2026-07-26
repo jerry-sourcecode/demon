@@ -3,7 +3,7 @@ import { RoleMap, Faction, type Character, type RoleType } from '../data/model'
 import { ref, type Ref, computed } from 'vue';
 import { Time } from '../utils/time';
 import { TagType } from '../data/tag';
-import { gameLog as getLog, clearLog, type GameEvent } from '../data/gameLog';
+import { gameLog as getLog, clearLog, type GameEvent, logPhaseChange } from '../data/gameLog';
 
 export const ACTION_COST = {
     skill: 2,
@@ -68,6 +68,7 @@ export const useDataStore = defineStore('data', () => {
 
     function nextTime() {
         time.value = Time.nextTime(time.value);
+        logPhaseChange();
         chars.value.forEach(c => c.pruneExpiredTags());
     }
 

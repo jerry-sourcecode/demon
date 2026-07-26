@@ -1,7 +1,7 @@
 import { ref, type Ref } from "vue";
 import { useDataStore } from "@/store/value";
 import { Time } from "@/utils/time";
-import type { RoleType } from "./model";
+import type { DeadReasonType, RoleType } from "./model";
 
 // ── 事件类型 ──
 
@@ -14,7 +14,8 @@ export type GameEventType =
     | 'disguiseChange'
     | 'reputationChange'
     | 'skillResolution'
-    | 'gameEnd';
+    | 'gameEnd'
+    | 'confusedChange';
 
 // ── 各事件类型的 meta ──
 
@@ -35,7 +36,7 @@ interface ExecuteMeta {
 }
 
 interface DeathMeta {
-    cause: 'execute' | 'night' | 'other';
+    cause: DeadReasonType;
 }
 
 interface DisguiseChangeMeta {
@@ -55,6 +56,8 @@ interface SkillResolutionMeta {
     disguised: boolean;
     /** 技能结算时主体是否混乱 */
     confused: boolean;
+    /** 混乱来源（施加者 ID） */
+    confusedBy?: number;
     /** 伪装身份（如有） */
     disguiseRole?: RoleType;
     /** 技能结算时主体的角色（避免后续角色变更影响回放） */
@@ -64,6 +67,19 @@ interface SkillResolutionMeta {
 interface GameEndMeta {
     win: boolean;
     reputation: number;
+    reason?: string;
+}
+
+interface ConfusedChangeMeta {
+    action: 'add' | 'remove';
+    /** 施加者 ID */
+    source?: number;
+    /** 施加者的角色（冻结快照） */
+    sourceRole?: RoleType;
+    /** 过期时间（仅 add 时有意义） */
+    till?: Time.TimeNumber;
+    /** 主体的角色（冻结快照） */
+    role: RoleType;
 }
 
 export type GameEventMeta =
@@ -75,7 +91,8 @@ export type GameEventMeta =
     | DisguiseChangeMeta
     | ReputationChangeMeta
     | SkillResolutionMeta
-    | GameEndMeta;
+    | GameEndMeta
+    | ConfusedChangeMeta;
 
 // ── 完整事件 ──
 
@@ -148,7 +165,7 @@ export function logExecute(target: number): void {
     addLog('execute', 0, { target });
 }
 
-export function logDeath(subject: number, cause: 'execute' | 'night' | 'other'): void {
+export function logDeath(subject: number, cause: DeadReasonType): void {
     addLog('death', subject, { cause });
 }
 
@@ -165,13 +182,25 @@ export function logSkillResolution(subject: number, detail: string): void {
     const dataStore = useDataStore();
     const c = dataStore.chars.get(subject);
     const confused = c ? c.hasTag('confused' as any) : false;
+    const confusedBy = c ? (c.getTag('confused' as any)[0] as any)?.source as number | undefined : undefined;
     const disguiseTg = c?.getTag('disguise' as any)[0];
     const disguised = !!disguiseTg;
     const disguiseRole = disguiseTg?.meta as RoleType | undefined;
-    addLog('skillResolution', subject, { detail, disguised, confused, disguiseRole, role: c?.role ?? 'unknown' as RoleType });
+    addLog('skillResolution', subject, { detail, disguised, confused, confusedBy, disguiseRole, role: c?.role ?? 'unknown' as RoleType });
 }
 
-export function logGameEnd(win: boolean): void {
+export function logGameEnd(win: boolean, reason?: string): void {
     const dataStore = useDataStore();
-    addLog('gameEnd', 0, { win, reputation: dataStore.reputation });
+    addLog('gameEnd', 0, { win, reputation: dataStore.reputation, reason });
+}
+
+export function logConfusedChange(
+    subject: number,
+    action: 'add' | 'remove',
+    role: RoleType,
+    source?: number,
+    sourceRole?: RoleType,
+    till?: Time.TimeNumber,
+): void {
+    addLog('confusedChange', subject, { action, role, source, sourceRole, till });
 }

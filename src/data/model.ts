@@ -13,12 +13,12 @@ export { RoleMap, Faction } from "./roles";
 
 // ── Tag meta 类型系统 ──
 
-export type DeadReasonType = 'other' | 'night' | 'execute' | 'demon' | 'assassin' | 'moonchild';
+export type DeadReasonType = 'other' | 'night' | 'execute' | 'demon' | 'assassin' | 'moonchild' | 'slayer';
 
 /** 各 Tag 的 meta 类型映射 */
 interface TagMetaMap {
     dead: { type?: DeadReasonType };
-    dying: { force?: boolean, type?: DeadReasonType }
+    dying: { force?: boolean; type?: DeadReasonType }
     confused: undefined;
     disguise: RoleType;
     executionImmune: { day: number };
@@ -61,17 +61,20 @@ export class Character {
     }
 
     /**
-     * 判断作为善良玩家时，技能是否有效
+     * 判断技能是否有效。confused 始终无效；若 disguise.meta===role 也无效。
      */
-    isAwake() {
-        return this.isEvilAwake() && !this.hasTag(TagType.disguise);
+    isAwake(role: RoleType): boolean {
+        if (this.hasTag(TagType.confused)) return false;
+        if (this.hasTag(TagType.disguise)) {
+            const dis = this.getTag(TagType.disguise)[0];
+            if (dis && dis.meta === role) return false;
+        }
+        return true;
     }
 
-    /**
-     * 判断作为邪恶玩家时，技能是否有效
-     */
-    isEvilAwake() {
-        return !this.hasTag(TagType.confused);
+    /** 是否已回忆（拥有 recall Tag） */
+    hasRecalled(): boolean {
+        return this.hasTag(TagType.recall);
     }
 
     getRoleDetail() {
@@ -220,7 +223,7 @@ export function pickKindPreferVillager(chars: Character[], count: number = 1, fi
     const used = new Set<number>();
 
     // 优先村民
-    const villagers = shuffle(chars.filter(x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead) && filter(x)));
+    const villagers = shuffle(chars.filter(x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
     for (const v of villagers) {
         if (result.length >= count) break;
         result.push(v);
@@ -229,7 +232,7 @@ export function pickKindPreferVillager(chars: Character[], count: number = 1, fi
 
     // 不足则取其他善良
     if (result.length < count) {
-        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isEvilByEvil() && !x.hasTag(TagType.dead) && filter(x)));
+        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isEvilByEvil() && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
         for (const o of others) {
             if (result.length >= count) break;
             result.push(o);

@@ -104,7 +104,12 @@
 							style="margin-right: 20px"
 							>再来一局</n-button
 						>
-						<n-button @click="exportReplay">导出复盘</n-button>
+						<n-button
+							@click="exportReplay"
+							style="margin-right: 12px"
+							>导出复盘</n-button
+						>
+						<n-button @click="copyReplayJSON">复制 JSON</n-button>
 					</div>
 				</div>
 			</n-tab-pane>
@@ -119,9 +124,7 @@
 						class="reveal-card"
 						:style="{ borderColor: factionColor(c) }">
 						<template #header>
-							<span :style="{ color: factionColor(c) }">
-								#{{ c.id }} {{ roleDisplayName(c) }}
-							</span>
+							<AbilityMd :markdown="`#${c.id} ::${c.role}::`" />
 						</template>
 						<template #header-extra>
 							<n-tag
@@ -138,11 +141,12 @@
 							<p v-if="c.hasTag('dead' as any)" class="dead-tag">
 								☠ {{ deathCauseLabel(c) }}
 							</p>
-							<p
+							<div
 								v-if="c.hasTag('disguise' as any)"
 								class="disguise-tag">
-								伪装为：{{ disguiseRoleName(c) }}
-							</p>
+								<AbilityMd
+									:markdown="`伪装为：::${disguiseRoleKey(c)}::`" />
+							</div>
 						</div>
 					</n-card>
 				</div>
@@ -150,7 +154,11 @@
 
 			<!-- Tab 3: 复盘时间线 -->
 			<n-tab-pane name="replay" tab="📜 复盘">
-				<n-tabs type="segment" animated v-if="dayGroups.length > 0">
+				<n-tabs
+					type="segment"
+					animated
+					v-model:value="replayDayTab"
+					v-if="dayGroups.length > 0">
 					<n-tab-pane
 						v-for="group in dayGroups"
 						:key="group.day"
@@ -178,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
 	NModal,
 	NTabs,
@@ -189,6 +197,7 @@ import {
 	NTimeline,
 	NTimelineItem,
 	NEmpty,
+	useMessage,
 } from "naive-ui";
 import { useDataStore } from "@/store/value";
 import {
@@ -400,6 +409,7 @@ const DEATH_CAUSE: Record<DeadReasonType, string> = {
 	assassin: "刺杀",
 	execute: "处决",
 	moonchild: "诅咒",
+	slayer: "枪击",
 	night: "夜间死亡",
 	other: "死于非命",
 };
@@ -421,6 +431,11 @@ function disguiseRoleName(c: Character): string {
 	return tg ? (RoleMap[tg.meta]?.display ?? tg.meta) : "无";
 }
 
+function disguiseRoleKey(c: Character): string {
+	const tg = c.getTag(TagType.disguise)[0];
+	return tg?.meta ?? "";
+}
+
 // ── 复盘时间线 ──
 
 interface DayGroup {
@@ -440,6 +455,9 @@ const dayGroups = computed<DayGroup[]>(() => {
 		.map(([day, events]) => ({ day, events }));
 });
 
+/** 复盘面板内层 Tab 选中值，保留切换面板时的状态 */
+const replayDayTab = ref<string>();
+
 const EVENT_LABELS: Record<string, string> = {
 	gameStart: "🎬 游戏开始",
 	phaseChange: "⏰ 阶段切换",
@@ -450,6 +468,7 @@ const EVENT_LABELS: Record<string, string> = {
 	reputationChange: "📊 声望变化",
 	skillResolution: "🔄 技能结算",
 	gameEnd: "🏁 游戏结束",
+	confusedChange: "😵 混乱状态",
 };
 
 function formatEventTitle(event: GameEvent): string {
@@ -498,13 +517,34 @@ function formatEventDetail(event: GameEvent): string {
 			let sp = `#${event.subject} ::${displayRole}::`;
 			if (meta.disguised && meta.disguiseRole)
 				sp += `（伪装：::${meta.disguiseRole}::）`;
-			if (meta.confused) sp += `（::confused::）`;
+			if (meta.confused && meta.confusedBy)
+				sp += `【::confused:: 来自#${meta.confusedBy}】`;
+			else if (meta.confused) sp += `（::confused::）`;
 			return `${sp}：${meta.detail ?? ""}`;
 		}
 		case "gameEnd":
 			return meta.win
 				? "胜利！所有邪恶已被消灭"
-				: `失败！声望归零（最终声望：${meta.reputation}）`;
+				: (meta.reason ?? `失败（最终声望：${meta.reputation}）`);
+		case "confusedChange": {
+			const cr = meta.role ?? "unknown";
+			const sr = meta.sourceRole ?? "unknown";
+			if (meta.action === "add") {
+				let tillStr = "";
+				if (meta.till && meta.till !== Infinity) {
+					tillStr = `，将会持续到 ${Time.getTimeString(meta.till)}`;
+				}
+				const sourceStr = meta.source
+					? `，施加者：#${meta.source}（::${sr}::）`
+					: "";
+				return `#${event.subject}（::${cr}::）开始::confused::${tillStr}${sourceStr}`;
+			} else {
+				const sourceStr = meta.source
+					? `来自 #${meta.source}（::${sr}::）的`
+					: "";
+				return `#${event.subject}（::${cr}::）${sourceStr}::confused::被清除，变得::awake::`;
+			}
+		}
 		default:
 			return "";
 	}
@@ -515,7 +555,7 @@ function restartGame() {
 	emit("restart");
 }
 
-function exportReplay() {
+function buildReplayData() {
 	const initRoles: Record<number, string> = {};
 	dataStore.chars.forEach((c, id) => {
 		initRoles[id] = c.role;
@@ -539,7 +579,7 @@ function exportReplay() {
 			disguiseRole: disguiseTag?.meta as string | undefined,
 		};
 	});
-	const data = {
+	return {
 		version: 1,
 		timestamp: new Date().toISOString(),
 		initRoles,
@@ -550,6 +590,10 @@ function exportReplay() {
 			chars: finalChars,
 		},
 	};
+}
+
+function exportReplay() {
+	const data = buildReplayData();
 	const blob = new Blob([JSON.stringify(data, null, 2)], {
 		type: "application/json",
 	});
@@ -559,6 +603,18 @@ function exportReplay() {
 	a.download = `replay-${new Date().toISOString().slice(0, 10)}.json`;
 	a.click();
 	URL.revokeObjectURL(url);
+}
+
+const message = useMessage();
+
+async function copyReplayJSON() {
+	try {
+		const data = buildReplayData();
+		await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+		message.success("复盘 JSON 已复制到剪贴板");
+	} catch {
+		message.error("复制失败，请手动导出");
+	}
 }
 </script>
 

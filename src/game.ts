@@ -4,7 +4,7 @@ import { useDataStore } from "./store/value";
 import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
 import { TagType } from "./data/tag";
-import { logGameStart, logPhaseChange, logGameEnd } from "./data/gameLog";
+import { logGameStart, logGameEnd } from "./data/gameLog";
 
 /** 检查游戏是否结束 */
 function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: ReturnType<typeof useEmitter>): boolean {
@@ -13,14 +13,20 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
     const evilAlive = dataStore.evilAlive;
     if (evilAlive.length === 0) {
         dataStore.gameOver = true;
-        logGameEnd(true);
+        logGameEnd(true, '所有邪恶已被消灭');
         emitter.emit('game-end', true);
+        return true;
+    }
+    if (dataStore.charList().length <= 2) {
+        dataStore.gameOver = true;
+        logGameEnd(false, '仅剩2人，::evil::控制了小镇');
+        emitter.emit('game-end', false);
         return true;
     }
     if (dataStore.reputation <= 0) {
         dataStore.reputation = 0;
         dataStore.gameOver = true;
-        logGameEnd(false);
+        logGameEnd(false, '声望归零，你被放逐');
         emitter.emit('game-end', false);
         return true;
     }
@@ -47,7 +53,7 @@ function swapRoles(from: Faction, to: Faction, count: number) {
 export async function start(opts?: {
     villager?: number; outsider?: number; minion?: number; demon?: number;
 }) {
-    const vc = opts?.villager ?? 5;
+    const vc = opts?.villager ?? 6;
     const oc = opts?.outsider ?? 2;
     const mc = opts?.minion ?? 1;
     const dc = opts?.demon ?? 1;
@@ -58,13 +64,13 @@ export async function start(opts?: {
 
     let player: RoleType[] = [];
     player.push(...pickRoles(Faction.villager, vc));
-    player.push(...pickRoles(Faction.outsider, oc));
+    player.push(...pickRoles(Faction.outsider, oc), 'TwoFaced');
     player.push(...pickRoles(Faction.minion, mc));
     player.push(...pickRoles(Faction.demon, dc));
     player = shuffle(player);
 
     let idx = 0;
-    let disguiseRoleList = [...pickRoles(Faction.villager, 5), ...randpick(allRoleKeys(), 2, (x) => RoleMap[x].faction === Faction.outsider && x !== 'Drunk').items]
+    let disguiseRoleList = [...pickRoles(Faction.villager, 5), ...randpick(allRoleKeys(), 2, (x) => RoleMap[x].faction === Faction.outsider && x !== 'Drunk' && x !== 'TwoFaced').items]
     player.forEach(x => {
         idx++;
         const c = new Character(idx, x);
@@ -163,7 +169,6 @@ export async function start(opts?: {
     let gameEnded = false;
     while (!gameEnded) {
         dataStore.nextTime();
-        logPhaseChange();
 
         if (checkGameEnd(dataStore, emitter)) {
             gameEnded = true;
@@ -171,25 +176,34 @@ export async function start(opts?: {
         }
 
         if (Time.getPhase(dataStore.time) === Time.Phase.Night) {
-            const order: { prio: number, c: Character, role: RoleType }[] = [];
+            // onTimeChange：无优先级，阶段切换时即时触发
+            dataStore.chars.forEach(x => {
+                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
+                runFn(RoleMap[x.role].onTimeChange, x, dataStore.time);
+                const tg = x.getTag(TagType.disguise)[0];
+                if (tg) runFn(RoleMap[tg.meta].onTimeChange, x, dataStore.time);
+            });
+
+            // onNightSkill：夜间技能，按优先级排序执行
+            const order: { prio: number; c: Character; role: RoleType }[] = [];
             dataStore.chars.forEach(x => {
                 if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
                 let prio = runFn(x.getRoleDetail().nightActionPriority, x);
-                if (prio) order.push({ prio, c: x, role: x.role });
+                if (prio !== undefined) order.push({ prio, c: x, role: x.role });
                 if (x.hasTag(TagType.disguise)) {
                     const dis_role = x.getTag(TagType.disguise)[0]!.meta;
                     prio = runFn(RoleMap[dis_role].nightActionPriority, x);
-                    if (prio) order.push({ prio, c: x, role: dis_role });
+                    if (prio !== undefined) order.push({ prio, c: x, role: dis_role });
                 }
-            })
+            });
             order.sort((a, b) => b.prio - a.prio);
             for (const x of order) {
-                await runFn(RoleMap[x.role].onTimeChange, x.c, dataStore.time);
+                await runFn(RoleMap[x.role].onNightSkill, x.c, dataStore.time);
             }
         } else {
             dataStore.chars.forEach(x => {
                 if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
-                runFn(RoleMap[x.displayRole].onTimeChange, x, dataStore.time);
+                runFn(RoleMap[x.role].onTimeChange, x, dataStore.time);
                 const tg = x.getTag(TagType.disguise)[0];
                 if (tg) runFn(RoleMap[tg.meta].onTimeChange, x, dataStore.time);
             })
@@ -207,8 +221,13 @@ export async function start(opts?: {
                 let needMove = false;
                 dataStore.chars.forEach(x => {
                     if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
-                    if (runFn(RoleMap[x.displayRole].canActivateSkill, x, dataStore.time)) {
-                        needMove = true;
+                    if (runFn(RoleMap[x.role].canActivateSkill, x, dataStore.time)) {
+                        if (x.hasTag(TagType.disguise)) {
+                            const dis_role = x.getTag(TagType.disguise)[0]!.meta;
+                            if (runFn(RoleMap[dis_role].canActivateSkill, x, dataStore.time)) {
+                                needMove = true;
+                            }
+                        }
                     }
                 })
                 if (needMove && !dataStore.gameOver) {

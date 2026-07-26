@@ -2,7 +2,7 @@ import { runFn } from "@/utils/utils";
 import { Time } from "../utils/time";
 import { RoleMap, type Character, type DeadReasonType } from "./model";
 import { useDataStore } from "@/store/value";
-import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution } from "./gameLog";
+import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution, logConfusedChange } from "./gameLog";
 
 export const TagType = {
     /** 死亡 */
@@ -69,9 +69,10 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             if (tag.till <= now && !c.hasTag(TagType.dead)) {
                 c.addTag(TagType.dead,
                     {
+                        source: tag.source,
                         force: (tag.meta as { force?: boolean })?.force ?? false,
                         meta: {
-                            type: (tag.meta as { type?: any })?.type ?? 'other'
+                            type: (tag.meta as { type?: any })?.type ?? 'other',
                         }
                     }
                 );
@@ -102,7 +103,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
 
             c.getTag(TagType.grandson).forEach(tg => {
                 const grandma = data.chars.get(tg.source!);
-                if (grandma?.isAwake()) {
+                if (grandma?.isAwake('Grandma')) {
                     logSkillResolution(grandma.id, `因为过度思念而殉情。`)
                     grandma.addTag(TagType.dead);
                 }
@@ -141,7 +142,11 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     [TagType.recall]: {
         afterAdd(c) {
             c.displayRole = c.getTag(TagType.disguise)[0]?.meta ?? c.role;
-            runFn(RoleMap[c.displayRole]!.onRecall, c);
+            runFn(RoleMap[c.role]!.onRecall, c);
+            if (c.hasTag(TagType.disguise)) {
+                const dis_role = c.getTag(TagType.disguise)[0]!.meta;
+                runFn(RoleMap[dis_role].onRecall, c);
+            }
         },
     },
     [TagType.disguise]: {
@@ -152,5 +157,40 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             logDisguiseChange(c.id, c.role, undefined);
             c.displayRole = c.role;
         },
-    }
+    },
+    [TagType.confused]: {
+        afterAdd(c, tag) {
+            // 仅在首次获得 confused 时记录（从清醒→混乱）
+            if (c.getTagCount(TagType.confused) === 1) {
+                const dataStore = useDataStore();
+                const source = tag.source;
+                const sourceC = source ? dataStore.chars.get(source) : undefined;
+                logConfusedChange(
+                    c.id,
+                    'add',
+                    c.role,
+                    source,
+                    sourceC?.role,
+                    tag.till,
+                );
+            }
+        },
+        afterRemove(c, tag) {
+            // 仅在最后一层 confused 被移除时记录（从混乱→清醒）
+            // 注意：不能用 getTagCount，因为 pruneExpiredTags 中已过期的标签不再满足 till > now
+            const totalConfused = c.tags.filter(t => t.type === TagType.confused).length;
+            if (totalConfused === 1) {
+                const dataStore = useDataStore();
+                const source = tag.source;
+                const sourceC = source ? dataStore.chars.get(source) : undefined;
+                logConfusedChange(
+                    c.id,
+                    'remove',
+                    c.role,
+                    source,
+                    sourceC?.role,
+                );
+            }
+        },
+    },
 };

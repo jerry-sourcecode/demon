@@ -5,7 +5,7 @@ import { useDataStore } from "../store/value";
 import { useEmitter } from "../store/emit";
 import { allRoleKeys, randint, randpick, swap } from "@/utils/utils";
 import { ref } from "vue";
-import { logReputationChange, logSkillResolution } from "./gameLog";
+import { logReputationChange, logSkillResolution, logGameEnd } from "./gameLog";
 
 export interface IRole {
     display: string,
@@ -26,11 +26,13 @@ export interface IRole {
     canActivateSkill?: (c: Character, t: Time.TimeNumber) => boolean,
     /** 夜间行动优先级，越大越先行动 */
     nightActionPriority?: (c: Character) => number,
+    /** 夜间技能（优先级排序执行） */
+    onNightSkill?: (c: Character, t: Time.TimeNumber) => void,
     /** 释放主动技能时 */
     onActiveSkill?: (c: Character) => void,
     /** 回忆时 */
     onRecall?: (c: Character) => void,
-    /** 时间改变时 */
+    /** 时间改变时（无优先级，阶段切换触发） */
     onTimeChange?: (c: Character, t: Time.TimeNumber) => void,
     /** 游戏开始时 */
     onStart?: (c: Character) => void;
@@ -118,14 +120,11 @@ const roles = {
         abnormal: {
             overall: "仍会正常死亡。",
         },
-        nightActionPriority() {
-            return 20;
-        },
         onTimeChange(c, t) {
             if (Time.getPhase(t) === Time.Phase.Night) {
                 c.addTag(TagType.protect, {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn)
-                })
+                });
             }
         }
     },
@@ -204,14 +203,14 @@ const roles = {
             if (c.hasTag(TagType.farmer)) {
                 c.info.push(`我原来是${RoleMap[c.getTag(TagType.farmer)[0]!.meta].display}`)
             }
-            if (!c.isAwake()) {
+            if (!c.isAwake('Farmer')) {
                 logSkillResolution(c.id, '由于神志不清，未能传承。');
                 return;
             }
             const dataStore = useDataStore();
             let x;
             try {
-                x = randpick(dataStore.charList(), 1, (c) => c.getRoleDetail().faction === Faction.villager && c.displayRole === 'unknown' && !c.hasTag(TagType.farmer)).items[0]!;
+                x = randpick(dataStore.charList(), 1, (c) => c.getRoleDetail().faction === Faction.villager && !c.hasRecalled() && !c.hasTag(TagType.farmer)).items[0]!;
             }
             catch {
                 return;
@@ -301,15 +300,17 @@ const roles = {
             c.useSkill('skill');
             const obj = x[0]!;
             if (obj.getRoleDetail().faction !== Faction.villager) {
+                c.info.push(`对 #${obj.id} 发动复活失败。`);
                 logSkillResolution(c.id, `对 #${obj.id} 发动复活失败（非镇民）`);
-                return;
             }
-            if (!c.hasTag(TagType.confused, TagType.disguise)) {
+            else if (!c.hasTag(TagType.confused, TagType.disguise)) {
                 obj.clearTags(TagType.confused)
                 obj.clearTags(TagType.dead);
                 obj.addTag(TagType.recall);
+                c.info.push(`复活了 #${obj.id}（::${obj.role}::）。`);
                 logSkillResolution(c.id, `复活了 #${obj.id}（::${obj.role}::）`);
             } else {
+                c.info.push(`对 #${obj.id} 发动复活失败。`);
                 logSkillResolution(c.id, `对 #${obj.id} 发动复活失败（技能异常）`);
                 return;
             }
@@ -355,7 +356,7 @@ const roles = {
                 has.push('::minion::');
             }
             ls = ls.sort();
-            if (!c.isAwake()) {
+            if (!c.isAwake('Bishop')) {
                 const allIds = [...dataStore.chars.keys()];
                 ls = (randpick(allIds, has.length).items).sort();
             }
@@ -392,7 +393,7 @@ const roles = {
             c.useSkill('skill');
             const obj = x[0]!;
             let ret = [];
-            if (c.isAwake()) {
+            if (c.isAwake('DreamBuilder')) {
                 ret.push(obj.role);
                 if (randint(1, 3) === 1) {
                     ret.push(randpick(allRoleKeys()).items[0]);
@@ -439,7 +440,7 @@ const roles = {
                     ans = x[i]?.role;
                 }
             }
-            if (!c.isAwake()) {
+            if (!c.isAwake('Druid')) {
                 for (let i = 0; i <= 2; i++) {
                     if (x[i]?.hasTag('disguise')) {
                         const dis_role = x[i]?.getTag('disguise')[0]?.meta as RoleType;
@@ -472,7 +473,7 @@ const roles = {
         onRecall(c) {
             const ans = [];
             const dataStore = useDataStore();
-            if (c.isAwake()) {
+            if (c.isAwake('Empress')) {
                 ans.push(...randpick(dataStore.charList(), 2, (it) => !it.isEvil()).items);
                 ans.push(...randpick(dataStore.charList(), 1, (it) => it.isEvil()).items);
             } else {
@@ -493,7 +494,7 @@ const roles = {
             let ans = '';
             const dataStore = useDataStore();
             const sz = dataStore.playerNumber();
-            if (c.isAwake()) {
+            if (c.isAwake('Ascetic')) {
                 for (let i = 1; i <= Math.floor(sz / 2); i++) {
                     const lf = dataStore.chars.get((c.id + i).wrap(sz))?.isEvil();
                     const rt = dataStore.chars.get((c.id - i).wrap(sz))?.isEvil();
@@ -570,10 +571,79 @@ const roles = {
                     ans = true;
                 }
             })
-            if (!c.isAwake()) ans = !ans;
+            if (!c.isAwake('FortuneTeller')) ans = !ans;
             x.sort((a, b) => a.id - b.id)
             c.info.push(`在 ${x.map(c => `#${c.id}`).join('、')} 中**${!ans ? '不' : ''}存在**::evil::。`)
             logSkillResolution(c.id, `在 ${x.map(c => `#${c.id}`).join('、')} 中${ans ? '发现' : '未发现'}邪恶`);
+        },
+    },
+    Empath: {
+        display: '共情者',
+        faction: Faction.villager,
+        summery: '“我的皮肤有些刺痛。这有些不太对劲。我能感觉得到。”',
+        ability: '每个夜晚，你会得知与你邻近的两名存活的玩家中::evil::的数量。',
+        abnormal: {
+            overall: "你会得知错误的数量。",
+        },
+        nightActionPriority() {
+            return 0;
+        },
+        onNightSkill(c, t) {
+            const dataStore = useDataStore();
+            const sz = dataStore.playerNumber();
+
+            if (!c.hasRecalled()) return;
+
+            let count = 0;
+            let cw;
+            for (let i = 1; i <= Math.floor(sz / 2); i++) {
+                cw = dataStore.chars.get((c.id + i).wrap(sz));
+                if (cw && !cw.hasTag(TagType.dead)) { count += cw.isEvil() ? 1 : 0; break; }
+            }
+            let ccw;
+            for (let i = 1; i <= Math.floor(sz / 2); i++) {
+                ccw = dataStore.chars.get((c.id - i).wrap(sz));
+                if (ccw && !ccw.hasTag(TagType.dead)) { count += ccw.isEvil() ? 1 : 0; break; }
+            }
+
+            if (!c.isAwake('Empath')) {
+                if (count === 0) count = 1 + randint(0, 1);
+                else if (count === 2) count = randint(0, 1);
+                else count = count === 1 ? (randint(0, 1) === 0 ? 0 : 2) : randint(0, 2);
+            }
+
+            c.info.push(`邻近两名存活玩家（#${cw?.id} 和 #${ccw?.id}）中有 ${count} 名::evil::。`);
+            logSkillResolution(c.id, `感知到（#${cw?.id} 和 #${ccw?.id}）有 ${count} 名邪恶。`);
+        },
+    },
+    Slayer: {
+        display: '猎手',
+        faction: Faction.villager,
+        summery: '“受死吧。”',
+        ability: '每局游戏限一次，你可以在白天时公开选择一名玩家：如果他是::evil::，他死亡。',
+        abnormal: {
+            overall: "你的技能不会生效。",
+        },
+        onStart(c) {
+            c.limitSkill('skill', 1);
+        },
+        canActivateSkill(c, t) {
+            return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
+        },
+        async onActiveSkill(c) {
+            const emitter = useEmitter();
+            const x = await emitter.emit('select-player', { count: 1, info: '::Slayer::：选择一名玩家，如果他是::evil::，他死亡。' });
+            if (!x) return;
+            c.useSkill('skill');
+            const obj = x[0]!;
+            if (obj.isEvil() && c.isAwake('Slayer')) {
+                logSkillResolution(c.id, `猎杀了 #${obj.id}（::${obj.role}::），其死亡。`);
+                c.info.push(`猎杀 #${obj.id}，其死亡。`);
+                obj.addTag('dead', { meta: { type: 'slayer' } });
+            } else {
+                c.info.push(`猎杀 #${obj.id}，无事发生。`);
+                logSkillResolution(c.id, `对 #${obj.id} 发动，无事发生。`);
+            }
         },
     },
     Grandma: {
@@ -588,7 +658,7 @@ const roles = {
             const data = useDataStore();
             ans = randpick(data.charList(), 1, (ch) => !ch.isEvil() && ch.id !== c.id).items[0]!;
             role = ans.role;
-            if (!c.isAwake()) {
+            if (!c.isAwake('Grandma')) {
                 ans = randpick(data.charList(), 1, (ch) => ch.isEvilByEvil() && ch.id !== c.id).items[0]!;
                 role = ans.getTag(TagType.disguise)[0]?.meta!;
             }
@@ -604,10 +674,10 @@ const roles = {
             overall: "你仍需要选择玩家，但技能不会生效。",
         },
         nightActionPriority() {
-            return 20;
+            return 7;
         },
-        async onTimeChange(c, t) {
-            if (Time.getPhase(t) !== Time.Phase.Night || Time.getDay(t) === 1 || c.displayRole === 'unknown') return;
+        async onNightSkill(c, t) {
+            if (Time.getDay(t) === 1 || !c.hasRecalled()) return;
 
             const emitter = useEmitter();
             const chosen = await emitter.emit('select-player', {
@@ -618,7 +688,7 @@ const roles = {
             });
             if (!chosen || chosen.length < 1) return;
 
-            if (!c.isAwake()) {
+            if (!c.isAwake('Monk')) {
                 logSkillResolution(c.id, `选择了 #${chosen[0]!.id}，但是由于神志不清，技能未能生效。`);
                 return;
             }
@@ -635,10 +705,10 @@ const roles = {
         abnormal: {
             overall: "你仍需要选择玩家，但技能不会生效。"
         }, nightActionPriority() {
-            return 20;
+            return 7;
         },
-        async onTimeChange(c, t) {
-            if (Time.getPhase(t) !== Time.Phase.Night || Time.getDay(t) === 1 || c.displayRole === 'unknown') return;
+        async onNightSkill(c, t) {
+            if (Time.getDay(t) === 1 || !c.hasRecalled()) return;
 
             const emitter = useEmitter();
             const chosen = await emitter.emit('select-player', {
@@ -648,7 +718,7 @@ const roles = {
             });
             if (!chosen || chosen.length < 2) return;
 
-            if (!c.isAwake()) {
+            if (!c.isAwake('Innkeeper')) {
                 logSkillResolution(c.id, `选择了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，但是由于神志不清，技能未能生效。`);
                 return;
             }
@@ -661,11 +731,12 @@ const roles = {
 
             logSkillResolution(c.id,
                 `保护了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，#${drunk.id} 醉酒`);
-            chosen[0]!.addTag(TagType.protect, { till });
-            chosen[1]!.addTag(TagType.protect, { till });
             drunk.addTag(TagType.confused, {
                 till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
+                source: c.id,
             });
+            chosen[0]!.addTag(TagType.protect, { till });
+            chosen[1]!.addTag(TagType.protect, { till });
         },
     },
 
@@ -686,7 +757,8 @@ const roles = {
             overall: "即使你被处决，::kind::阵营也不会落败。"
         },
         onExecuted(c) {
-            if (c.isAwake()) {
+            if (c.isAwake('Saint')) {
+                logGameEnd(false, '圣徒被处决，::kind::阵营落败');
                 const emitter = useEmitter();
                 emitter.emit('game-end', false);
             }
@@ -713,7 +785,7 @@ const roles = {
                 })
                     .then((res) => {
                         const obj = res![0];
-                        if (obj?.isEvil() || !c.isAwake()) {
+                        if (obj?.isEvil() || !c.isAwake('Moonchild')) {
                             c.info.push(`对 #${obj?.id} 发动技能，无事发生。`)
                             logSkillResolution(c.id, `对 #${obj?.id} 发动，无事发生`);
                             return;
@@ -731,7 +803,7 @@ const roles = {
     Drunk: {
         display: '酒鬼',
         faction: Faction.outsider,
-        ability: '你始终认为你是一个不在场的::villager::。你始终::drunk::。',
+        ability: '你始终认为你是一个**不在场**的::villager::。你始终::drunk::。',
         abnormal: {
             overall: "你始终::confused::。",
         },
@@ -741,8 +813,96 @@ const roles = {
             const absent = allVillagers.filter(k => !inPlay.has(k));
             const believed = absent.length > 0 ? randpick(absent).items[0]! : allVillagers[0]!;
             c.addTag(TagType.disguise, { meta: believed });
-            c.addTag(TagType.confused, { till: Time.FAR_FUTURE });
             logSkillResolution(c.id, `自认为是一个::${believed}::，并始终::drunk::。`);
+            c.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
+        },
+    },
+    TwoFaced: {
+        display: '双面人',
+        faction: Faction.outsider,
+        summery: '“我当然是个好人……至少今天是的。”',
+        ability: `你始终认为你是一个**在场**的::villager::，你获得该能力。每个夜晚，若你和该玩家都清醒且健康，你::drunk::直到下一个::dusk::。`,
+        abnormal: {
+            overall: "当晚不会有人因为你本身的能力::drunk::，你获得的能力异常。",
+        },
+        onStart(c) {
+            const dataStore = useDataStore();
+            const inPlayVillagers = dataStore.charList().filter(
+                x => x.getRoleDetail().faction === Faction.villager && x.id !== c.id
+            );
+            if (inPlayVillagers.length > 0) {
+                const target = randpick(inPlayVillagers).items[0]!;
+                _store.set(c.id, target.id);
+                c.addTag(TagType.disguise, { meta: target.role });
+                logSkillResolution(c.id, `认为自己是::${target.role}::（#${target.id}），并获得该能力。`);
+            } else {
+                // 没有镇民在场，随机选一个不在场的镇民
+                const allVillagers = allRoleKeys().filter(k => RoleMap[k].faction === Faction.villager);
+                const inPlay = new Set(dataStore.charList().map(x => x.role));
+                const absent = allVillagers.filter(k => !inPlay.has(k));
+                const believed = absent.length > 0 ? randpick(absent).items[0]! : allVillagers[0]!;
+                c.addTag(TagType.disguise, { meta: believed });
+                logSkillResolution(c.id, `没有镇民在场，认为自己是一个::${believed}::。`);
+            }
+        },
+        nightActionPriority() {
+            return 10;
+        },
+        onNightSkill(c, t) {
+            const targetId = _store.get(c.id);
+            if (targetId === undefined || targetId === 0) return;
+
+            const dataStore = useDataStore();
+            const target = dataStore.chars.get(targetId);
+            if (!target) return;
+
+            // 若自己和目标都清醒且健康（均无 confused），则自己醉酒
+            if (!c.hasTag(TagType.confused) && !target.hasTag(TagType.confused)) {
+                logSkillResolution(c.id, `与 #${targetId} 都清醒健康，双面人::drunk::。`);
+                c.addTag(TagType.confused, {
+                    till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
+                    source: c.id,
+                });
+            }
+        },
+    },
+    Sage: {
+        display: '贤者',
+        faction: Faction.villager,
+        summery: '“这书山卷海中一定隐藏着秘密，我非常确信！这些秘密就隐藏在这一字一句之间等待着我们发掘。小子！再帮我多拿点蜡烛！还有墨水！虽然这些笔记有些晦涩，但有关恶魔的谜语很快就会被揭晓。”',
+        ability: '如果::evil::杀死了你，在当晚你会被唤醒并得知两名玩家，其中一名是杀死你的那个::evil::。',
+        abnormal: {
+            overall: "你不会得知任何信息。",
+        },
+        afterTagAdd(c, tg) {
+            if (tg.type !== TagType.dead) return;
+            const deadTag = c.getTag(TagType.dead)[0];
+            const dtype = (deadTag?.meta as { type?: string } | undefined)?.type;
+            if (dtype !== 'demon' && dtype !== 'assassin') return;
+
+            if (!c.isAwake('Sage')) {
+                logSkillResolution(c.id, '由于神志不清，未能得知凶手。');
+                return;
+            }
+
+            const dataStore = useDataStore();
+            const killerId = deadTag?.source;
+            const killer = killerId ? dataStore.chars.get(killerId) : null;
+            if (!killer) {
+                logSkillResolution(c.id, '未能找到凶手。');
+                return;
+            }
+
+            const other = randpick(
+                dataStore.charList(),
+                1,
+                x => x.id !== killer.id && !x.hasTag(TagType.dead)
+            ).items[0];
+            if (!other) return;
+
+            const pair = [killer, other].sort((a, b) => a.id - b.id);
+            c.info.push(`在 #${pair[0]!.id} 和 #${pair[1]!.id} 中，有一人杀死了我。`);
+            logSkillResolution(c.id, `得知凶手在 #${pair[0]!.id} 和 #${pair[1]!.id} 之中。`);
         },
     },
 
@@ -755,28 +915,27 @@ const roles = {
             overall: "你的技能不会生效。"
         },
         nightActionPriority() {
-            return 10;
+            return 8;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             function fn(obj: Character) {
                 if (!obj.isEvilByEvil()) {
-                    obj.addTag(TagType.confused, {
-                        till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk)
-                    });
                     logSkillResolution(c.id, `使得#${obj?.id}（::${obj?.role}::）::poisoned::。`)
+                    obj.addTag(TagType.confused, {
+                        till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
+                        source: c.id,
+                    });
                 }
             }
             const dataStore = useDataStore();
             const sz = dataStore.chars.size;
-            if (Time.getPhase(t) === Time.Phase.Night) {
-                if (c.isEvilAwake()) {
-                    let obj = dataStore.chars.get((c.id + 1).wrap(sz))!;
-                    fn(obj);
-                    obj = dataStore.chars.get((c.id - 1).wrap(sz))!
-                    fn(obj);
-                } else {
-                    logSkillResolution(c.id, '由于神志不清，技能未能生效。');
-                }
+            if (c.isAwake('Poisoner')) {
+                let obj = dataStore.chars.get((c.id + 1).wrap(sz))!;
+                fn(obj);
+                obj = dataStore.chars.get((c.id - 1).wrap(sz))!
+                fn(obj);
+            } else {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
             }
         },
     },
@@ -791,19 +950,19 @@ const roles = {
         nightActionPriority(c) {
             return 5;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (t === Time.makeTime(2, Time.Phase.Night)) {
-                if (c.isEvilAwake()) {
-                    const obj = pickKindPreferVillager(dataStore.charList())[0];
-                    obj?.addTag('dying', {
-                        till: Time.makeTime(2, Time.Phase.Dawn),
-                        meta: { force: true, type: 'assassin' },
-                    })
-                    logSkillResolution(c.id, `刺杀了 #${obj?.id}（::${obj?.role}::）。`);
-                } else {
-                    logSkillResolution(c.id, '由于神志不清，技能未能生效。');
-                }
+            if (t !== Time.makeTime(2, Time.Phase.Night)) return;
+            if (c.isAwake('Assassin')) {
+                const obj = pickKindPreferVillager(dataStore.charList())[0];
+                logSkillResolution(c.id, `刺杀了 #${obj?.id}（::${obj?.role}::）。`);
+                obj?.addTag('dying', {
+                    till: Time.makeTime(2, Time.Phase.Dawn),
+                    source: c.id,
+                    meta: { force: true, type: 'assassin' },
+                })
+            } else {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
             }
         },
     },
@@ -816,26 +975,27 @@ const roles = {
             overall: "该玩家被处决时仍会死亡。"
         },
         nightActionPriority() {
-            return 7;
+            return 9;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (Time.getPhase(t) === Time.Phase.Night) {
-                if (!c.isEvilAwake()) {
-                    logSkillResolution(c.id, '由于神志不清，技能未能生效。');
-                    return;
-                }
-                const evilList = dataStore.charList().filter(
-                    x => x.isEvilByEvil() && !x.hasTag(TagType.executionImmune) && !x.hasTag(TagType.dead)
-                );
-                if (evilList.length === 0) return;
-                const target = randpick(evilList).items[0]!;
-                target.addTag(TagType.executionImmune, {
-                    till: Time.makeTime(Time.getDay(t) + 1, Time.Phase.Dawn),
-                    meta: { day: Time.getDay(t) },
-                });
-                logSkillResolution(c.id, `保护了 #${target.id}（::${target.role}::）免于处决。`);
+            if (!c.isAwake('DemonAdvocate')) {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                return;
             }
+            const evilList = dataStore.charList().filter(
+                x => x.isEvilByEvil() && !x.hasTag(TagType.executionImmune) && !x.hasTag(TagType.dead)
+            );
+            if (evilList.length === 0) {
+                c.info.push('没有可保护的::evil::。');
+                return
+            }
+            const target = randpick(evilList).items[0]!;
+            target.addTag(TagType.executionImmune, {
+                till: Time.makeTime(Time.getDay(t) + 1, Time.Phase.Dawn),
+                meta: { day: Time.getDay(t) },
+            });
+            logSkillResolution(c.id, `保护了 #${target.id}（::${target.role}::）免于处决。`);
         },
     },
     Baron: {
@@ -872,10 +1032,9 @@ const roles = {
         nightActionPriority() {
             return 6;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (Time.getPhase(t) !== Time.Phase.Night) return;
-            if (!c.isEvilAwake()) {
+            if (!c.isAwake('GodFather')) {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
@@ -889,6 +1048,7 @@ const roles = {
                 logSkillResolution(c.id, `由于白天有::outsider::死亡，教父杀死了 #${target?.id}（::${target?.role}::）`)
                 target?.addTag('dying', {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                    source: c.id,
                     meta: { type: 'night' },
                 });
             }
@@ -905,11 +1065,10 @@ const roles = {
         nightActionPriority() {
             return 1;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (Time.getPhase(t) !== Time.Phase.Night) return;
             if (Time.getDay(t) < 2) return;
-            if (!c.isEvilAwake()) {
+            if (!c.isAwake('Imp')) {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
@@ -918,13 +1077,14 @@ const roles = {
                 logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
                 target.addTag('dying', {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                    source: c.id,
                     meta: { type: 'demon' },
                 });
             }
         },
         afterTagAdd(c, tg) {
             if (tg.type === TagType.dead) {
-                if (c.isEvilAwake()) {
+                if (c.isAwake('Imp')) {
                     const dataStore = useDataStore();
                     const minions = dataStore.charList().filter(
                         x => x.getRoleDetail().faction === Faction.minion && !x.hasTag(TagType.dead)
@@ -955,9 +1115,8 @@ const roles = {
         nightActionPriority() {
             return 1;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (Time.getPhase(t) !== Time.Phase.Night) return;
 
             const day = Time.getDay(t);
             const prevId = _store.get(c.id);
@@ -967,32 +1126,45 @@ const roles = {
                 const prev = dataStore.chars.get(prevId);
                 if (prev && !prev.hasTag(TagType.dead)) {
                     prev.clearTags(TagType.confused);
+                    logSkillResolution(c.id, `#${prevId} 因毒素发作而死亡并恢复健康。`);
                     prev.addTag('dying', {
                         till: Time.makeTime(day, Time.Phase.Dawn),
+                        source: c.id,
                         meta: { type: 'demon' },
                     });
-                    logSkillResolution(c.id, `#${prevId} 因毒素发作而死亡并恢复健康。`);
                 }
                 _store.set(c.id, 0);
             }
 
-            if (!c.isEvilAwake()) {
+            if (!c.isAwake('Pukka')) {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
 
             const target = pickKindPreferVillager(dataStore.charList())[0];
             if (target) {
-                target.addTag(TagType.confused, { till: Time.FAR_FUTURE });
-                _store.set(c.id, target.id);
                 logSkillResolution(c.id, `使 #${target.id} ::poisoned::。`);
+                target.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
+                _store.set(c.id, target.id);
+            }
+        },
+        afterTagAdd(c, tg) {
+            if (tg.type === TagType.dead) {
+                const targetId = _store.get(c.id);
+                if (targetId && targetId !== 0) {
+                    const target = useDataStore().chars.get(targetId);
+                    if (target) {
+                        target.clearTags(TagType.confused);
+                        logSkillResolution(c.id, `死亡后，#${targetId} 的毒素解除。`);
+                    }
+                }
             }
         },
     },
     Po: {
         display: '珀',
         faction: Faction.demon,
-        ability: '每个夜晚*，以下行动二选一：充能（上限1）；消耗充能，随机三名::kind::（优先::villager::）死亡。',
+        ability: '每个夜晚*，若没有充能，进行一次充能，否则，消耗充能，随机三名::kind::（优先::villager::）死亡。',
         abnormal: {
             overall: "充能或释放不会生效。",
         },
@@ -1002,12 +1174,11 @@ const roles = {
         nightActionPriority() {
             return 1;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (Time.getPhase(t) !== Time.Phase.Night) return;
             if (Time.getDay(t) < 2) return;
 
-            if (!c.isEvilAwake()) {
+            if (!c.isAwake('Po')) {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
@@ -1020,15 +1191,16 @@ const roles = {
             } else {
                 _store.set(c.id, 0);
                 const targets = pickKindPreferVillager(dataStore.charList(), 3);
-                for (const target of targets) {
-                    target.addTag('dying', {
-                        till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
-                        meta: { type: 'demon' },
-                    });
-                }
                 const killed = targets.map(t => t.id).sort();
                 if (killed.length > 0) {
                     logSkillResolution(c.id, `释放充能，杀死了 ${killed.map(id => `#${id}`).join('、')}。`);
+                }
+                for (const target of targets) {
+                    target.addTag('dying', {
+                        till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                        source: c.id,
+                        meta: { type: 'demon' },
+                    });
                 }
             }
         },
@@ -1050,9 +1222,8 @@ const roles = {
             counts.outsider -= 1;
             counts.villager += 1;
         },
-        onTimeChange(c, t) {
+        onNightSkill(c, t) {
             const dataStore = useDataStore();
-            if (Time.getPhase(t) !== Time.Phase.Night) return;
             if (Time.getDay(t) < 2) return;
 
             let justRetained = false;
@@ -1060,7 +1231,7 @@ const roles = {
 
             // 检测首个爪牙死亡（仅触发一次）
             if (storedId === 0) {
-                if (!c.isEvilAwake()) {
+                if (!c.isAwake('Vigormortis')) {
                     _store.set(c.id, -1);  // 永久标记：混乱导致能力流失
                     logSkillResolution(c.id, '由于神志不清，爪牙能力永久流失。');
                     return;
@@ -1080,15 +1251,15 @@ const roles = {
                     );
                     if (adjacent.length > 0) {
                         const victim = randpick(adjacent).items[0]!;
-                        victim.addTag(TagType.confused, { till: Time.FAR_FUTURE });
                         logSkillResolution(c.id, `#${deadMinion.id} 死亡后，#${victim.id} 中毒。`);
+                        victim.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
                     }
                     logSkillResolution(c.id, `#${deadMinion.id} 保留了能力，今晚暂停杀戮。`);
                 }
             }
 
             // 后续夜的混乱检查
-            if (!c.isEvilAwake()) {
+            if (!c.isAwake('Vigormortis')) {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
@@ -1098,11 +1269,12 @@ const roles = {
 
             const target = pickKindPreferVillager(dataStore.charList())[0];
             if (target) {
+                logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
                 target.addTag('dying', {
                     till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                    source: c.id,
                     meta: { type: 'demon' },
                 });
-                logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
             }
         },
     }
