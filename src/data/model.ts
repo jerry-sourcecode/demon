@@ -87,7 +87,7 @@ export class Character {
         return fac === Faction.minion || fac === Faction.demon || (this.role === 'Recluse' && !this.hasTag(TagType.confused));
     }
 
-    isEvilByEvil(): boolean {
+    isTrulyEvil(): boolean {
         const fac = RoleMap[this.role]?.faction;
         return fac === Faction.minion || fac === Faction.demon;
     }
@@ -214,7 +214,16 @@ export function shuffle<T>(arr: T[]): T[] {
 /** 从 RoleMap 中随机抽取 n 个指定阵营的不同角色。支持单个阵营或阵营数组 */
 export function pickRoles(factions: Faction | Faction[], n: number): RoleType[] {
     const set = new Set(Array.isArray(factions) ? factions : [factions]);
-    return randpick(allRoleKeys(), n, (x) => set.has(RoleMap[x].faction)).items;
+    const dataStore = useDataStore();
+    return randpick(
+        allRoleKeys().filter(x => {
+            if (!set.has(RoleMap[x].faction)) return false;
+            // 未配置 AI 时，过滤掉需要 AI 的角色
+            if (RoleMap[x].requiresAI && !dataStore.aiConfigured) return false;
+            return true;
+        }),
+        n,
+    ).items;
 }
 
 /** 随机选善良玩家，优先镇民，排除已死亡。count 默认 1，返回数组 */
@@ -232,7 +241,7 @@ export function pickKindPreferVillager(chars: Character[], count: number = 1, fi
 
     // 不足则取其他善良
     if (result.length < count) {
-        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isEvilByEvil() && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
+        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isTrulyEvil() && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
         for (const o of others) {
             if (result.length >= count) break;
             result.push(o);

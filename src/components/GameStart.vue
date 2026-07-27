@@ -2,14 +2,175 @@
 	<div class="start-page">
 		<h1 class="title">血染钟楼</h1>
 		<p class="subtitle">单人推理游戏</p>
+
 		<div class="actions">
-			<n-button type="primary" size="large" @click="onStart"
+			<n-button
+				type="primary"
+				size="large"
+				@click="onStart"
+				style="width: 100%"
 				>开始游戏</n-button
 			>
-			<n-button size="large" @click="showImport = true"
+		</div>
+
+		<div class="secondary-actions">
+			<n-button
+				size="large"
+				@click="showConfig = true"
+				style="width: 100%"
+				>配置</n-button
+			>
+			<n-button
+				size="large"
+				@click="showMatchHistory = true"
+				style="width: 100%"
+				>对决记录</n-button
+			>
+			<n-button
+				size="large"
+				@click="showImport = true"
+				style="width: 100%"
 				>导入复盘</n-button
 			>
 		</div>
+
+		<!-- 统一配置弹窗（游戏配置 + AI 配置） -->
+		<n-modal
+			v-model:show="showConfig"
+			preset="card"
+			title="配置"
+			style="max-width: 520px; width: 80vw"
+			:mask-closable="false">
+			<n-tabs type="segment" animated v-model:value="configTab">
+				<!-- Tab 1: 游戏配置 -->
+				<n-tab-pane name="game" tab="⚔ 游戏">
+					<div class="config-body">
+						<div class="count-grid">
+							<div class="count-item">
+								<span class="count-label">镇民</span>
+								<n-input-number
+									v-model:value="localConfig.villager"
+									:min="0"
+									:max="15"
+									size="small" />
+							</div>
+							<div class="count-item">
+								<span class="count-label">外来者</span>
+								<n-input-number
+									v-model:value="localConfig.outsider"
+									:min="0"
+									:max="10"
+									size="small" />
+							</div>
+							<div class="count-item">
+								<span class="count-label">爪牙</span>
+								<n-input-number
+									v-model:value="localConfig.minion"
+									:min="0"
+									:max="7"
+									size="small" />
+							</div>
+							<div class="count-item">
+								<span class="count-label">恶魔</span>
+								<n-input-number
+									v-model:value="localConfig.demon"
+									:min="0"
+									:max="3"
+									size="small" />
+							</div>
+						</div>
+						<p class="total-hint">
+							总计：{{ totalPlayers }} 名玩家
+						</p>
+						<n-divider />
+						<div class="extra-grid">
+							<div class="count-item">
+								<span class="count-label">每轮行动力</span>
+								<n-input-number
+									v-model:value="localConfig.actionPoints"
+									:min="3"
+									:max="20"
+									size="small" />
+							</div>
+							<div class="count-item">
+								<span class="count-label">初始声望</span>
+								<n-input-number
+									v-model:value="localConfig.reputation"
+									:min="1"
+									:max="50"
+									size="small" />
+							</div>
+						</div>
+					</div>
+				</n-tab-pane>
+
+				<!-- Tab 2: AI 配置 -->
+				<n-tab-pane name="ai" tab="🤖 AI">
+					<div class="ai-form">
+						<n-form-item label="启用 AI">
+							<n-switch v-model:value="aiEnabled" />
+						</n-form-item>
+						<template v-if="aiEnabled">
+							<n-form-item label="服务商">
+								<n-select
+									v-model:value="aiService"
+									:options="aiServiceOptions"
+									placeholder="选择 AI 服务商" />
+							</n-form-item>
+							<n-form-item label="API Key">
+								<n-input
+									v-model:value="aiApiKey"
+									type="password"
+									show-password-on="click"
+									placeholder="输入 API Key" />
+							</n-form-item>
+							<n-form-item label="模型">
+								<n-input
+									v-model:value="aiModel"
+									placeholder="deepseek-chat" />
+							</n-form-item>
+						</template>
+						<n-alert
+							v-if="aiEnabled && !hasAiConfig"
+							type="warning"
+							:show-icon="true">
+							AI
+							未配置，相关角色（艺术家、渔夫等）不会出现在游戏中
+						</n-alert>
+					</div>
+				</n-tab-pane>
+			</n-tabs>
+			<template #footer>
+				<div class="config-footer">
+					<n-button @click="showConfig = false">取消</n-button>
+					<n-button
+						v-if="configTab === 'game'"
+						type="primary"
+						@click="onConfigApply">
+						应用
+					</n-button>
+					<n-button
+						v-if="configTab === 'ai'"
+						type="primary"
+						@click="onSaveAiConfig"
+						:disabled="!aiApiKey.trim()">
+						保存
+					</n-button>
+				</div>
+			</template>
+		</n-modal>
+
+		<!-- 对决记录弹窗 -->
+		<MatchHistoryModal v-model:show="showMatchHistory" />
+
+		<!-- 导入复盘结果弹窗 -->
+		<GameOverModal
+			v-if="importedRecord"
+			v-model:show="showImportResult"
+			:record="importedRecord"
+			:show-actions="false" />
+
+		<!-- 导入复盘弹窗 -->
 		<n-modal
 			v-model:show="showImport"
 			preset="card"
@@ -41,7 +202,7 @@
 	</div>
 </template>
 <script setup lang="ts">
-import { ref, nextTick } from "vue";
+import { ref, nextTick, computed, watch } from "vue";
 import {
 	NButton,
 	NModal,
@@ -49,75 +210,106 @@ import {
 	NTabPane,
 	NUpload,
 	NInput,
+	NInputNumber,
+	NSelect,
+	NFormItem,
+	NSwitch,
+	NAlert,
+	NDivider,
 	type UploadOnChange,
 } from "naive-ui";
 import { start } from "@/game.ts";
 import { useDataStore } from "@/store/value";
-import type { GameEvent } from "@/data/gameLog";
-import { clearLog, setLog } from "@/data/gameLog";
-import { Character, type RoleType, type DeadReasonType } from "@/data/model";
-import { TagType } from "@/data/tag";
+import { useMatchStore } from "@/store/matchStore";
+import type { MatchConfig, MatchRecord } from "@/data/match";
+import { DEFAULT_MATCH_CONFIG } from "@/data/match";
+import MatchHistoryModal from "./MatchHistoryModal.vue";
+import GameOverModal from "./GameOverModal.vue";
+
 const emit = defineEmits<{ start: [] }>();
 const showImport = ref(false);
+const showConfig = ref(false);
+const configTab = ref("game");
+const showMatchHistory = ref(false);
+const showImportResult = ref(false);
+const importedRecord = ref<MatchRecord | null>(null);
 const pasteText = ref("");
 const importError = ref("");
-interface ImportData {
-	version: number;
-	initRoles: Record<number, RoleType>;
-	events: GameEvent[];
-	finalState: {
-		reputation: number;
-		win: boolean;
-		chars: Record<
-			number,
-			{
-				role: RoleType;
-				dead: boolean;
-				deathType?: string;
-				disguiseRole?: string;
-			}
-		>;
-	};
-}
-function processImport(data: ImportData) {
-	const ds = useDataStore();
-	clearLog();
 
-	// 重建角色
-	ds.chars = new Map();
-	for (const [idStr, role] of Object.entries(data.initRoles)) {
-		const id = Number(idStr);
-		const c = new Character(id, role);
-		ds.chars.set(id, c);
-	}
+const dataStore = useDataStore();
+const matchStore = useMatchStore();
 
-	// 应用死亡状态
-	if (data.finalState.chars) {
-		for (const [idStr, fc] of Object.entries(data.finalState.chars)) {
-			const id = Number(idStr);
-			const c = ds.chars.get(id);
-			if (c && fc.dead)
-				c.addTag(TagType.dead, {
-					meta: { type: (fc.deathType as DeadReasonType) ?? "other" },
-				});
-			if (c && fc.disguiseRole)
-				c.addTag(TagType.disguise, {
-					meta: fc.disguiseRole as RoleType,
-				});
+// ── 游戏配置 ──
+
+const localConfig = ref<MatchConfig>({ ...DEFAULT_MATCH_CONFIG });
+
+// 从 matchStore 恢复上次配置
+watch(
+	() => showConfig.value,
+	(val) => {
+		if (val) {
+			localConfig.value = { ...matchStore.matchConfig };
 		}
-	}
+	},
+);
 
-	// 直接设置日志（保留原始时间戳）
-	setLog(data.events);
+const totalPlayers = computed(
+	() =>
+		localConfig.value.villager +
+		localConfig.value.outsider +
+		localConfig.value.minion +
+		localConfig.value.demon,
+);
 
-	ds.reputation = data.finalState.reputation;
-	ds.gameOver = true;
-	emit("start");
-	setTimeout(() => {
-		import("@/store/emit").then((m) =>
-			m.useEmitter().emit("game-end", data.finalState.win),
+function onConfigApply() {
+	const config: MatchConfig = { ...localConfig.value };
+	matchStore.setMatchConfig(config);
+	showConfig.value = false;
+}
+
+// ── AI 配置 ──
+
+const aiEnabled = ref(dataStore.aiConfigured);
+const aiService = ref<"deepseek" | "siliconflow">(dataStore.aiConfig.service);
+const aiApiKey = ref(dataStore.aiConfig.apiKey);
+const aiModel = ref(dataStore.aiConfig.model);
+const aiServiceOptions: { label: string; value: "deepseek" | "siliconflow" }[] =
+	[
+		{ label: "DeepSeek", value: "deepseek" },
+		{ label: "SiliconFlow", value: "siliconflow" },
+	];
+
+const hasAiConfig = computed(
+	() => !!aiApiKey.value.trim() && !!aiModel.value.trim(),
+);
+
+function onSaveAiConfig() {
+	if (aiEnabled.value && !hasAiConfig.value) return;
+	if (!aiEnabled.value) {
+		dataStore.aiConfigured = false;
+	} else {
+		dataStore.setAiConfig(
+			aiService.value,
+			aiApiKey.value.trim(),
+			aiModel.value.trim() || "deepseek-chat",
 		);
-	}, 100);
+	}
+	showConfig.value = false;
+}
+
+// ── 开始游戏 ──
+
+async function onStart() {
+	emit("start");
+	await nextTick();
+	start(matchStore.matchConfig);
+}
+// ── 导入复盘（文件/粘贴） ──
+
+function processImport(record: MatchRecord) {
+	importedRecord.value = record;
+	showImport.value = false;
+	showImportResult.value = true;
 }
 async function onFileUpload(data: Parameters<UploadOnChange>[0]) {
 	importError.value = "";
@@ -136,11 +328,6 @@ function onPasteImport() {
 	} catch {
 		importError.value = "解析失败，请检查 JSON 格式。";
 	}
-}
-async function onStart() {
-	emit("start");
-	await nextTick();
-	start();
 }
 </script>
 <style scoped>
@@ -166,11 +353,58 @@ async function onStart() {
 	margin: 0 0 24px 0;
 }
 .actions {
+	width: 260px;
+}
+.secondary-actions {
 	display: flex;
-	gap: 16px;
+	flex-direction: column;
+	gap: 8px;
+	width: 260px;
 }
 .error {
 	color: #f74f4f;
 	margin-top: 8px;
+}
+.ai-form {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+/* 游戏配置 */
+.config-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.count-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+.count-item {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.count-label {
+	font-size: 13px;
+	color: #aaa;
+}
+.total-hint {
+	font-size: 13px;
+	color: #888;
+	margin: 0;
+	text-align: center;
+}
+.extra-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+.config-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
 }
 </style>

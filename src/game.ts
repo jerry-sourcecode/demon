@@ -5,6 +5,7 @@ import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
 import { TagType } from "./data/tag";
 import { logGameStart, logGameEnd } from "./data/gameLog";
+import type { MatchConfig } from "./data/match";
 
 /** 检查游戏是否结束 */
 function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: ReturnType<typeof useEmitter>): boolean {
@@ -17,9 +18,9 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
         emitter.emit('game-end', true);
         return true;
     }
-    if (dataStore.charList().length <= 2) {
+    if (dataStore.charList().filter(c => !c.isEvil() && !c.hasTag(TagType.dead)).length <= 1) {
         dataStore.gameOver = true;
-        logGameEnd(false, '仅剩2人，::evil::控制了小镇');
+        logGameEnd(false, '仅剩1名::kind::，::evil::控制了小镇');
         emitter.emit('game-end', false);
         return true;
     }
@@ -50,21 +51,22 @@ function swapRoles(from: Faction, to: Faction, count: number) {
     }
 }
 
-export async function start(opts?: {
-    villager?: number; outsider?: number; minion?: number; demon?: number;
-}) {
-    const vc = opts?.villager ?? 6;
-    const oc = opts?.outsider ?? 2;
-    const mc = opts?.minion ?? 1;
-    const dc = opts?.demon ?? 1;
+export async function start(matchConfig: MatchConfig) {
+    const vc = matchConfig.villager;
+    const oc = matchConfig.outsider;
+    const mc = matchConfig.minion;
+    const dc = matchConfig.demon;
     const dataStore = useDataStore();
 
+    dataStore.currentMatchConfig = { ...matchConfig };
     dataStore.initCounts = { villager: vc, outsider: oc, minion: mc, demon: dc };
-    dataStore.reputation = 15;
+    dataStore.reputation = matchConfig.reputation;
+    dataStore.maxActionPoints = matchConfig.actionPoints;
+    dataStore.actionPoints = matchConfig.actionPoints;
 
     let player: RoleType[] = [];
     player.push(...pickRoles(Faction.villager, vc));
-    player.push(...pickRoles(Faction.outsider, oc), 'TwoFaced');
+    player.push(...pickRoles(Faction.outsider, oc));
     player.push(...pickRoles(Faction.minion, mc));
     player.push(...pickRoles(Faction.demon, dc));
     player = shuffle(player);
@@ -102,7 +104,7 @@ export async function start(opts?: {
     const allMinionKeys = allRoleKeys().filter(k => RoleMap[k].faction === Faction.minion);
     const allDemonKeys = allRoleKeys().filter(k => RoleMap[k].faction === Faction.demon);
     let actualEvil = dataStore.charList()
-        .filter(c => c.isEvilByEvil())
+        .filter(c => c.isTrulyEvil())
         .map(c => c.role);
 
     // 混淆恶魔
@@ -222,11 +224,12 @@ export async function start(opts?: {
                 dataStore.chars.forEach(x => {
                     if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
                     if (runFn(RoleMap[x.role].canActivateSkill, x, dataStore.time)) {
-                        if (x.hasTag(TagType.disguise)) {
-                            const dis_role = x.getTag(TagType.disguise)[0]!.meta;
-                            if (runFn(RoleMap[dis_role].canActivateSkill, x, dataStore.time)) {
-                                needMove = true;
-                            }
+                        needMove = true;
+                    }
+                    if (x.hasTag(TagType.disguise)) {
+                        const dis_role = x.getTag(TagType.disguise)[0]!.meta;
+                        if (runFn(RoleMap[dis_role].canActivateSkill, x, dataStore.time)) {
+                            needMove = true;
                         }
                     }
                 })

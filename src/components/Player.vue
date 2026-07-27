@@ -35,7 +35,7 @@
 						size="tiny"
 						type="warning"
 						class="actBtn"
-						@click="onRecall">
+						@click.stop="onRecall">
 						回忆
 					</NButton>
 					<NButton
@@ -43,7 +43,7 @@
 						size="tiny"
 						type="primary"
 						class="actBtn"
-						@click="onSkill">
+						@click.stop="onSkill">
 						发动技能
 					</NButton>
 					<NButton
@@ -51,7 +51,7 @@
 						size="tiny"
 						type="error"
 						class="actBtn"
-						@click="onExecute">
+						@click.stop="onExecute">
 						处决
 					</NButton>
 				</template>

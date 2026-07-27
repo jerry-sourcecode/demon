@@ -24,6 +24,8 @@ export const useEmitter = defineStore('signals', () => {
         'wait-for-action': () => Promise<void>;
         'select-player': (options?: SelectPlayerOptions) => Promise<Character[] | null>;
         'game-end': (res: boolean) => void;
+        'ask-question': (options?: { info?: string }) => Promise<string | null>;
+        'show-message': (options: { type: 'warning' | 'info'; content: string }) => Promise<void>;
     }
 
     // 存储信号与回调函数的映射

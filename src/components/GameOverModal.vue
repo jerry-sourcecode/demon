@@ -3,8 +3,13 @@
 		v-model:show="showModal"
 		preset="card"
 		:mask-closable="false"
+		:closable="false"
 		style="max-width: 900px; width: 90vw; max-height: 85vh"
-		title="游戏结束">
+		:title="
+			showActions
+				? '游戏结束'
+				: `对决记录 - ${formatDate(props.record.date)}`
+		">
 		<n-tabs type="line" animated>
 			<!-- Tab 1: 概览 -->
 			<n-tab-pane name="overview" tab="📊 概览">
@@ -13,16 +18,19 @@
 					<div class="result-section">
 						<div
 							class="result-icon"
-							:style="{ color: win ? '#4fc3f7' : '#f74f4f' }">
-							{{ win ? "🏆" : "💀" }}
+							:style="{
+								color: record.win ? '#4fc3f7' : '#f74f4f',
+							}">
+							{{ record.win ? "🏆" : "💀" }}
 						</div>
-						<h2 :style="{ color: win ? '#4fc3f7' : '#f74f4f' }">
-							{{ win ? "胜利！" : "失败..." }}
+						<h2
+							:style="{
+								color: record.win ? '#4fc3f7' : '#f74f4f',
+							}">
+							{{ record.win ? "胜利！" : "失败..." }}
 						</h2>
-						<p class="result-subtitle">
-							{{
-								win ? "所有邪恶已被清除" : "声望归零，小镇沦陷"
-							}}
+						<p v-if="!showActions" class="result-subtitle">
+							{{ record.win ? "所有邪恶已被清除" : "小镇沦陷" }}
 						</p>
 					</div>
 
@@ -42,37 +50,39 @@
 							<div class="stat-item">
 								<span class="stat-label">最终声望</span>
 								<span class="stat-value">{{
-									finalReputation
+									record.stats.finalReputation
 								}}</span>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">总天数</span>
-								<span class="stat-value">{{ totalDays }}</span>
+								<span class="stat-value">{{
+									record.stats.totalDays
+								}}</span>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">处决次数</span>
 								<span class="stat-value">{{
-									executeCount
+									record.stats.executeCount
 								}}</span>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">回忆次数</span>
 								<span class="stat-value">{{
-									recallCount
+									record.stats.recallCount
 								}}</span>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">善良存活</span>
 								<span class="stat-value"
-									>{{ goodAliveCount }} /
-									{{ goodTotalCount }}</span
+									>{{ record.stats.goodAlive }} /
+									{{ record.stats.goodTotal }}</span
 								>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">处决邪恶</span>
 								<span class="stat-value"
-									>{{ evilExecutedCount }} /
-									{{ evilTotalCount }}</span
+									>{{ record.stats.evilExecuted }} /
+									{{ record.stats.evilTotal }}</span
 								>
 							</div>
 							<div class="stat-item">
@@ -96,14 +106,36 @@
 						</n-tag>
 					</div>
 
+					<!-- 配置信息 -->
+					<div class="match-config-line">
+						配置：{{ record.config.villager }} 镇民
+						{{ record.config.outsider }} 外来者
+						{{ record.config.minion }} 爪牙
+						{{ record.config.demon }} 恶魔 ｜行动力
+						{{ record.config.actionPoints }} ｜初始声望
+						{{ record.config.reputation }}
+					</div>
+
 					<!-- 操作按钮 -->
 					<div class="actions">
-						<n-button
-							type="primary"
-							@click="restartGame"
-							style="margin-right: 20px"
-							>再来一局</n-button
-						>
+						<template v-if="showActions">
+							<n-button
+								type="primary"
+								@click="restartGame"
+								style="margin-right: 12px"
+								>再来一局</n-button
+							>
+							<n-button @click="goHome" style="margin-right: 12px"
+								>回到首页</n-button
+							>
+						</template>
+						<template v-else>
+							<n-button
+								@click="showModal = false"
+								style="margin-right: 12px"
+								>关闭</n-button
+							>
+						</template>
 						<n-button
 							@click="exportReplay"
 							style="margin-right: 12px"
@@ -128,7 +160,7 @@
 						</template>
 						<template #header-extra>
 							<n-tag
-								v-if="c.isEvilByEvil()"
+								v-if="c.isEvilByFaction"
 								type="error"
 								size="tiny"
 								>{{ factionLabel(c) }}</n-tag
@@ -137,15 +169,13 @@
 								factionLabel(c)
 							}}</n-tag>
 						</template>
-						<div :class="{ 'dead-card': c.hasTag('dead' as any) }">
-							<p v-if="c.hasTag('dead' as any)" class="dead-tag">
-								☠ {{ deathCauseLabel(c) }}
+						<div :class="{ 'dead-card': c.dead }">
+							<p v-if="c.dead" class="dead-tag">
+								☠ {{ c.deathCause }}
 							</p>
-							<div
-								v-if="c.hasTag('disguise' as any)"
-								class="disguise-tag">
+							<div v-if="c.disguiseRole" class="disguise-tag">
 								<AbilityMd
-									:markdown="`伪装为：::${disguiseRoleKey(c)}::`" />
+									:markdown="`伪装为：::${c.disguiseRole}::`" />
 							</div>
 						</div>
 					</n-card>
@@ -199,27 +229,28 @@ import {
 	NEmpty,
 	useMessage,
 } from "naive-ui";
-import { useDataStore } from "@/store/value";
-import {
-	RoleMap,
-	Faction,
-	type Character,
-	type DeadReasonType,
-} from "@/data/model";
+import { RoleMap, Faction, type RoleType } from "@/data/model";
 import { FACTION_COLORS } from "@/data/keywords";
 import type { GameEvent } from "@/data/gameLog";
+import type { MatchRecord } from "@/data/match";
 import { Time } from "@/utils/time";
-import { TagType } from "@/data/tag";
 import AbilityMd from "./AbilityMd.vue";
 
-const props = defineProps<{
-	win: boolean;
-	show: boolean;
-}>();
+const props = withDefaults(
+	defineProps<{
+		show: boolean;
+		record: MatchRecord;
+		showActions?: boolean;
+	}>(),
+	{
+		showActions: false,
+	},
+);
 
 const emit = defineEmits<{
 	"update:show": [value: boolean];
 	restart: [];
+	goHome: [];
 }>();
 
 const showModal = computed({
@@ -227,67 +258,74 @@ const showModal = computed({
 	set: (val) => emit("update:show", val),
 });
 
-const dataStore = useDataStore();
-
-// ── 统计数据 ──
-
-const log = computed(() => dataStore.gameLog);
-
-const totalDays = computed(() => {
-	const days = new Set(log.value.map((e) => Time.getDay(e.time)));
-	return days.size;
-});
-
-const executeCount = computed(
-	() => log.value.filter((e) => e.type === "execute").length,
-);
-
-const recallCount = computed(
-	() => log.value.filter((e) => e.type === "recall").length,
-);
-
-const finalReputation = computed(() => {
-	const endEvent = log.value.find((e) => e.type === "gameEnd");
-	return (endEvent?.meta as any)?.reputation ?? dataStore.reputation;
-});
-
-const charList = computed(() => dataStore.charList());
-
-/** 真实邪恶（不含隐士）：faction 为 demon 或 minion */
-function isTrulyEvil(c: Character): boolean {
-	const fac = RoleMap[c.role]?.faction;
-	return fac === Faction.demon || fac === Faction.minion;
+function formatDate(iso: string): string {
+	const d = new Date(iso);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-const goodTotalCount = computed(
-	() => charList.value.filter((c) => !isTrulyEvil(c)).length,
-);
-const goodAliveCount = computed(
-	() =>
-		charList.value.filter((c) => !isTrulyEvil(c) && !c.hasTag(TagType.dead))
-			.length,
-);
-const evilTotalCount = computed(
-	() => charList.value.filter((c) => isTrulyEvil(c)).length,
-);
+// ── 角色揭秘 ──
 
-const evilExecutedCount = computed(() => {
-	const executed = log.value
-		.filter((e) => e.type === "execute")
-		.map((e) => (e.meta as any)?.target as number)
-		.filter(Boolean);
-	let count = 0;
-	for (const id of executed) {
-		const c = dataStore.chars.get(id);
-		if (c && isTrulyEvil(c)) count++;
-	}
-	return count;
+interface CharInfo {
+	id: number;
+	role: RoleType;
+	isEvilByFaction: boolean;
+	dead: boolean;
+	deathCause: string;
+	disguiseRole: string | null;
+}
+
+const charList = computed<CharInfo[]>(() => {
+	const r = props.record;
+	const deathCauseMap: Record<string, string> = {
+		demon: "杀戮",
+		assassin: "刺杀",
+		execute: "处决",
+		moonchild: "诅咒",
+		slayer: "枪击",
+		night: "夜间死亡",
+		other: "死于非命",
+	};
+	return Object.entries(r.initRoles)
+		.map(([idStr, role]) => {
+			const id = Number(idStr);
+			const fc = r.finalChars[id];
+			const dead = !!fc?.dead;
+			const deathType = fc?.deathType;
+			const disguiseRole = fc?.disguiseRole ?? null;
+			const fac = RoleMap[role]?.faction;
+			return {
+				id,
+				role,
+				isEvilByFaction:
+					fac === Faction.demon || fac === Faction.minion,
+				dead,
+				deathCause: dead
+					? (deathCauseMap[deathType ?? "other"] ?? "已死亡")
+					: "",
+				disguiseRole,
+			};
+		})
+		.sort((a, b) => a.id - b.id);
 });
 
+function factionColor(c: CharInfo): string {
+	const fac = RoleMap[c.role]?.faction;
+	return FACTION_COLORS[fac ?? "unknown"] || "#888";
+}
+
+function factionLabel(c: CharInfo): string {
+	const fac = RoleMap[c.role]?.faction;
+	if (fac === Faction.villager) return "镇民";
+	if (fac === Faction.outsider) return "外来者";
+	if (fac === Faction.minion) return "爪牙";
+	if (fac === Faction.demon) return "恶魔";
+	return "未知";
+}
+
 const executeAccuracy = computed(() => {
-	const total = executeCount.value;
+	const total = props.record.stats.executeCount;
 	if (total === 0) return 100;
-	return Math.round((evilExecutedCount.value / total) * 100);
+	return Math.round((props.record.stats.evilExecuted / total) * 100);
 });
 
 // ── 评级 ──
@@ -300,53 +338,40 @@ interface RatingResult {
 }
 
 const ratingResult = computed<RatingResult>(() => {
-	const win = props.win;
-	const rep = finalReputation.value;
-	const days = totalDays.value;
-	const goodAlive = goodAliveCount.value;
-	const goodTotal = goodTotalCount.value;
+	const win = props.record.win;
+	const rep = props.record.stats.finalReputation;
+	const days = props.record.stats.totalDays;
+	const goodAlive = props.record.stats.goodAlive;
 	const accuracy = executeAccuracy.value;
 	const achievements: string[] = [];
 
-	// 基础分
-	let baseScore = win ? 60 : 0;
+	let baseScore = win ? 30 : 0;
 
-	// 声望 (25%)
 	let repScore = 0;
 	if (rep >= 20) repScore = 25;
 	else if (rep >= 15) repScore = 20 + ((rep - 15) / 5) * 5;
 	else if (rep >= 10) repScore = 15 + ((rep - 10) / 5) * 5;
 	else if (rep > 0) repScore = (rep / 10) * 15;
 
-	// 效率 (15%): ≤3天满分
 	let effScore = 0;
 	if (days <= 3) effScore = 15;
 	else if (days <= 5) effScore = 10 + ((5 - days) / 2) * 5;
 	else if (days <= 7) effScore = ((7 - days) / 2) * 10;
 
-	// 善良存活 (10%): ≥7人满分
 	let goodScore = 0;
-	const goodRatio = goodTotal > 0 ? goodAlive / goodTotal : 0;
 	if (goodAlive >= 7) goodScore = 10;
 	else if (goodAlive >= 5) goodScore = 7 + ((goodAlive - 5) / 2) * 3;
 	else if (goodAlive >= 3) goodScore = ((goodAlive - 3) / 2) * 7;
 
-	// 处决准确度 (10%)
 	let accScore = (accuracy / 100) * 10;
 
-	// 成就加分
-	if (accuracy === 100 && executeCount.value > 0) {
+	if (accuracy === 100 && props.record.stats.executeCount > 0)
 		achievements.push("零误杀");
-	}
-	if (win && days <= 3) {
-		achievements.push("速通");
-	}
-	const repNeverDrop = !log.value.some(
+	if (win && days <= 3) achievements.push("速通");
+	const repNeverDrop = !props.record.events.some(
 		(e) => e.type === "reputationChange" && (e.meta as any)?.delta < 0,
 	);
-	if (repNeverDrop && win) {
-		achievements.push("完美守护");
-	}
+	if (repNeverDrop && win) achievements.push("完美守护");
 
 	let bonusScore = 0;
 	if (achievements.includes("零误杀")) bonusScore += 3;
@@ -372,7 +397,7 @@ const ratingResult = computed<RatingResult>(() => {
 	} else if (totalScore >= 60) {
 		rating = "B";
 		tagType = "info";
-	} else if (evilExecutedCount.value > 0) {
+	} else if (props.record.stats.evilExecuted > 0) {
 		rating = "C";
 		tagType = "default";
 	} else {
@@ -388,54 +413,6 @@ const ratingTagType = computed(() => ratingResult.value.tagType);
 const totalScore = computed(() => ratingResult.value.totalScore);
 const achievements = computed(() => ratingResult.value.achievements);
 
-// ── 角色揭秘辅助 ──
-
-function factionColor(c: Character): string {
-	const fac = RoleMap[c.role]?.faction;
-	return FACTION_COLORS[fac] || "#888";
-}
-
-function factionLabel(c: Character): string {
-	const fac = RoleMap[c.role]?.faction;
-	if (fac === Faction.villager) return "镇民";
-	if (fac === Faction.outsider) return "外来者";
-	if (fac === Faction.minion) return "爪牙";
-	if (fac === Faction.demon) return "恶魔";
-	return "未知";
-}
-
-const DEATH_CAUSE: Record<DeadReasonType, string> = {
-	demon: "杀戮",
-	assassin: "刺杀",
-	execute: "处决",
-	moonchild: "诅咒",
-	slayer: "枪击",
-	night: "夜间死亡",
-	other: "死于非命",
-};
-
-function deathCauseLabel(c: Character): string {
-	const deadTag = c.getTag("dead" as any)[0];
-	const type =
-		(deadTag?.meta as { type?: DeadReasonType } | undefined)?.type ??
-		"other";
-	return DEATH_CAUSE[type] ?? "已死亡";
-}
-
-function roleDisplayName(c: Character): string {
-	return RoleMap[c.role]?.display ?? c.role;
-}
-
-function disguiseRoleName(c: Character): string {
-	const tg = c.getTag(TagType.disguise)[0];
-	return tg ? (RoleMap[tg.meta]?.display ?? tg.meta) : "无";
-}
-
-function disguiseRoleKey(c: Character): string {
-	const tg = c.getTag(TagType.disguise)[0];
-	return tg?.meta ?? "";
-}
-
 // ── 复盘时间线 ──
 
 interface DayGroup {
@@ -445,7 +422,7 @@ interface DayGroup {
 
 const dayGroups = computed<DayGroup[]>(() => {
 	const groups = new Map<number, GameEvent[]>();
-	for (const event of log.value) {
+	for (const event of props.record.events) {
 		const day = Time.getDay(event.time);
 		if (!groups.has(day)) groups.set(day, []);
 		groups.get(day)!.push(event);
@@ -455,7 +432,6 @@ const dayGroups = computed<DayGroup[]>(() => {
 		.map(([day, events]) => ({ day, events }));
 });
 
-/** 复盘面板内层 Tab 选中值，保留切换面板时的状态 */
 const replayDayTab = ref<string>();
 
 const EVENT_LABELS: Record<string, string> = {
@@ -481,13 +457,10 @@ function formatTimeStr(t: Time.TimeNumber): string {
 
 function formatEventDetail(event: GameEvent): string {
 	const meta = event.meta as any;
-	const c = event.subject > 0 ? dataStore.chars.get(event.subject) : null;
-	const subjectName = c ? `#${c.id}（::${c.role}::）` : "系统";
-
-	const subjC = dataStore.chars.get(event.subject);
-	const disguiseTg = subjC?.getTag(TagType.disguise)[0];
-	let prefix = subjC ? `#${subjC.id} ::${subjC.role}::` : "系统";
-	if (disguiseTg) prefix += `（伪装：::${disguiseTg.meta}::）`;
+	const initRole = props.record.initRoles[event.subject];
+	const roleName = initRole ? `::${initRole}::` : "系统";
+	const subjectName = initRole ? `#${event.subject}（${roleName}）` : "系统";
+	const prefix = initRole ? `#${event.subject} ${roleName}` : "系统";
 
 	switch (event.type) {
 		case "gameStart":
@@ -498,22 +471,16 @@ function formatEventDetail(event: GameEvent): string {
 			return `${prefix} 进行了回忆`;
 		case "execute":
 			return `玩家处决了 #${meta.target}`;
-		case "death": {
+		case "death":
 			return `${prefix} 死亡${meta.cause === "execute" ? "【被处决】" : meta.cause === "night" ? "【夜间死亡】" : ""}`;
-		}
 		case "disguiseChange":
-			if (meta.newRole) {
-				return `${subjectName} 获得了伪装身份：::${meta.newRole}::`;
-			} else {
-				return `${subjectName} 的伪装身份被移除，真实身份暴露`;
-			}
+			return meta.newRole
+				? `${subjectName} 获得了伪装身份：::${meta.newRole}::`
+				: `${subjectName} 的伪装身份被移除`;
 		case "reputationChange":
 			return `声望 ${meta.delta > 0 ? "+" : ""}${meta.delta}：${meta.reason}，当前 ${meta.newValue}`;
 		case "skillResolution": {
-			const displayRole =
-				(meta as any).role ??
-				dataStore.chars.get(event.subject)?.role ??
-				"unknown";
+			const displayRole = meta.role ?? initRole ?? "unknown";
 			let sp = `#${event.subject} ::${displayRole}::`;
 			if (meta.disguised && meta.disguiseRole)
 				sp += `（伪装：::${meta.disguiseRole}::）`;
@@ -528,21 +495,20 @@ function formatEventDetail(event: GameEvent): string {
 				: (meta.reason ?? `失败（最终声望：${meta.reputation}）`);
 		case "confusedChange": {
 			const cr = meta.role ?? "unknown";
-			const sr = meta.sourceRole ?? "unknown";
 			if (meta.action === "add") {
-				let tillStr = "";
-				if (meta.till && meta.till !== Infinity) {
-					tillStr = `，将会持续到 ${Time.getTimeString(meta.till)}`;
-				}
+				let tillStr =
+					meta.till && meta.till !== Infinity
+						? `，持续到 ${Time.getTimeString(meta.till)}`
+						: "";
 				const sourceStr = meta.source
-					? `，施加者：#${meta.source}（::${sr}::）`
+					? `，施加者：#${meta.source}（::${meta.sourceRole ?? "unknown"}::）`
 					: "";
 				return `#${event.subject}（::${cr}::）开始::confused::${tillStr}${sourceStr}`;
 			} else {
 				const sourceStr = meta.source
-					? `来自 #${meta.source}（::${sr}::）的`
+					? `来自 #${meta.source}（::${meta.sourceRole ?? "unknown"}::）的`
 					: "";
-				return `#${event.subject}（::${cr}::）${sourceStr}::confused::被清除，变得::awake::`;
+				return `#${event.subject}（::${cr}::）${sourceStr}::confused::被清除`;
 			}
 		}
 		default:
@@ -555,46 +521,13 @@ function restartGame() {
 	emit("restart");
 }
 
-function buildReplayData() {
-	const initRoles: Record<number, string> = {};
-	dataStore.chars.forEach((c, id) => {
-		initRoles[id] = c.role;
-	});
-	const finalChars: Record<
-		number,
-		{
-			role: string;
-			dead: boolean;
-			deathType?: string;
-			disguiseRole?: string;
-		}
-	> = {};
-	dataStore.chars.forEach((c, id) => {
-		const deadTag = c.getTag(TagType.dead)[0];
-		const disguiseTag = c.getTag(TagType.disguise)[0];
-		finalChars[id] = {
-			role: c.role,
-			dead: c.hasTag(TagType.dead),
-			deathType: (deadTag?.meta as any)?.type,
-			disguiseRole: disguiseTag?.meta as string | undefined,
-		};
-	});
-	return {
-		version: 1,
-		timestamp: new Date().toISOString(),
-		initRoles,
-		events: dataStore.gameLog,
-		finalState: {
-			reputation: dataStore.reputation,
-			win: props.win,
-			chars: finalChars,
-		},
-	};
+function goHome() {
+	showModal.value = false;
+	emit("goHome");
 }
 
 function exportReplay() {
-	const data = buildReplayData();
-	const blob = new Blob([JSON.stringify(data, null, 2)], {
+	const blob = new Blob([JSON.stringify(props.record, null, 2)], {
 		type: "application/json",
 	});
 	const url = URL.createObjectURL(blob);
@@ -609,8 +542,9 @@ const message = useMessage();
 
 async function copyReplayJSON() {
 	try {
-		const data = buildReplayData();
-		await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+		await navigator.clipboard.writeText(
+			JSON.stringify(props.record, null, 2),
+		);
 		message.success("复盘 JSON 已复制到剪贴板");
 	} catch {
 		message.error("复制失败，请手动导出");
@@ -683,6 +617,12 @@ async function copyReplayJSON() {
 	gap: 8px;
 	flex-wrap: wrap;
 	justify-content: center;
+}
+
+.match-config-line {
+	font-size: 13px;
+	color: #888;
+	text-align: center;
 }
 
 .actions {

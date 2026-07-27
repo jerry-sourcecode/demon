@@ -97,11 +97,43 @@
 		</div>
 		<!-- 游戏结束弹窗 -->
 		<GameOverModal
+			v-if="gameOverRecord"
 			v-model:show="showGameOverModal"
-			:win="isWin"
-			@restart="onRestart" />
+			:record="gameOverRecord"
+			:show-actions="true"
+			@restart="onRestart"
+			@go-home="onGoHome" />
 		<!-- Tab 身份参考面板 -->
 		<RoleSheet v-model:show="showRoleSheet" />
+
+		<!-- 艺术家问题对话框 -->
+		<n-modal
+			v-model:show="showQuestionDialog"
+			preset="card"
+			title="向说书人提问"
+			style="max-width: 500px; width: 80vw"
+			:mask-closable="false">
+			<p v-if="questionInfo" style="margin-bottom: 12px; color: #aaa">
+				{{ questionInfo }}
+			</p>
+			<n-input
+				v-model:value="questionInput"
+				type="textarea"
+				rows="3"
+				placeholder="请输入一个是非问题..."
+				@keydown.enter.ctrl="confirmQuestion" />
+			<template #footer>
+				<n-button @click="cancelQuestion" style="margin-right: 10px">
+					取消
+				</n-button>
+				<n-button
+					type="primary"
+					:disabled="!questionInput.trim()"
+					@click="confirmQuestion">
+					询问
+				</n-button>
+			</template>
+		</n-modal>
 	</div>
 </template>
 
@@ -116,7 +148,15 @@ import {
 	type CSSProperties,
 } from "vue";
 import Player from "./Player.vue";
-import { NCard, NButton, NStatistic, NNumberAnimation } from "naive-ui";
+import {
+	NCard,
+	NButton,
+	NStatistic,
+	NNumberAnimation,
+	NInput,
+	NModal,
+	useMessage,
+} from "naive-ui";
 import { ACTION_COST, useDataStore } from "@/store/value.ts";
 import { useEmitter } from "@/store/emit.ts";
 import { Faction, type Character } from "@/data/model";
@@ -125,6 +165,12 @@ import AbilityMd from "./AbilityMd.vue";
 import GameOverModal from "./GameOverModal.vue";
 import RoleSheet from "./RoleSheet.vue";
 import { start } from "@/game.ts";
+import { useMatchStore } from "@/store/matchStore";
+import { DEFAULT_MATCH_CONFIG, type MatchRecord } from "@/data/match";
+
+const panelEmit = defineEmits<{
+	goHome: [];
+}>();
 
 const dataStore = useDataStore();
 const prevReputation = ref(dataStore.reputation);
@@ -257,10 +303,23 @@ emitter.on("game-start", () => {
 
 const showGameOverModal = ref(false);
 const isWin = ref(false);
+const gameOverRecord = ref<MatchRecord | null>(null);
 
 emitter.on("game-end", (win) => {
 	dataStore.gameOver = true;
 	isWin.value = win;
+	const startEvent = dataStore.gameLog.find((e) => e.type === "gameStart");
+	const initRoles = ((startEvent?.meta as any)?.roles ?? {}) as Record<
+		number,
+		import("@/data/model").RoleType
+	>;
+	gameOverRecord.value = useMatchStore().buildMatchRecord(
+		dataStore.currentMatchConfig ?? DEFAULT_MATCH_CONFIG,
+		win,
+		dataStore.gameLog,
+		initRoles,
+		dataStore.chars,
+	);
 	setTimeout(() => {
 		showGameOverModal.value = true;
 	}, 500);
@@ -268,7 +327,12 @@ emitter.on("game-end", (win) => {
 
 function onRestart() {
 	dataStore.resetGame();
-	start();
+	start(useMatchStore().matchConfig);
+}
+
+function onGoHome() {
+	dataStore.resetGame();
+	panelEmit("goHome");
 }
 
 const waitRes: Ref<((value: void | PromiseLike<void>) => void) | null> =
@@ -367,6 +431,57 @@ function selectEnd() {
 
 function isSelected(id: number): boolean {
 	return selected.value.has(id);
+}
+
+// ── 消息提示 ──
+
+const message = useMessage();
+
+emitter.on("show-message", (options) => {
+	if (options.type === "warning") {
+		message.warning(options.content);
+	} else {
+		message.info(options.content);
+	}
+	return Promise.resolve();
+});
+
+// ── 艺术家问题对话框 ──
+
+const showQuestionDialog = ref(false);
+const questionInput = ref("");
+const questionInfo = ref("");
+let questionResolve: ((text: string | null) => void) | null = null;
+
+// 监听对话框关闭（点击 X 按钮），视为取消
+watch(showQuestionDialog, (val) => {
+	if (!val && questionResolve) {
+		questionResolve(null);
+		questionResolve = null;
+	}
+});
+
+emitter.on("ask-question", (options) => {
+	questionInfo.value = options?.info ?? "";
+	return new Promise<string | null>((resolve) => {
+		showQuestionDialog.value = true;
+		questionInput.value = "";
+		questionResolve = resolve;
+		midDoneBtn.value = false;
+	});
+});
+
+function confirmQuestion() {
+	const text = questionInput.value.trim();
+	showQuestionDialog.value = false;
+	questionResolve?.(text || null);
+	questionResolve = null;
+}
+
+function cancelQuestion() {
+	showQuestionDialog.value = false;
+	questionResolve?.(null);
+	questionResolve = null;
 }
 
 onUnmounted(() => {

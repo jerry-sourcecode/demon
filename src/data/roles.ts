@@ -1,11 +1,12 @@
 import { Time } from "../utils/time";
 import { type ITag, TagType } from "./tag";
 import { pickRoles, shuffle, type Character, pickKindPreferVillager } from "./model";
-import { useDataStore } from "../store/value";
+import { useDataStore, ACTION_COST } from "../store/value";
 import { useEmitter } from "../store/emit";
 import { allRoleKeys, randint, randpick, swap } from "@/utils/utils";
 import { ref } from "vue";
 import { logReputationChange, logSkillResolution, logGameEnd } from "./gameLog";
+import { callAi } from "@/utils/ai";
 
 export interface IRole {
     display: string,
@@ -22,6 +23,8 @@ export interface IRole {
     },
     /** 能力详情的 markdown 描述（支持 ::key:: 关键词语法） */
     ability: string,
+    /** 标记角色是否需要 AI（未配置 AI 时该角色不会出现在角色池） */
+    requiresAI?: boolean,
     /** 判断当前是否可以发动主动技能（无参，内部通过 useDataStore() 获取全局状态） */
     canActivateSkill?: (c: Character, t: Time.TimeNumber) => boolean,
     /** 夜间行动优先级，越大越先行动 */
@@ -88,7 +91,7 @@ const roles = {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
-            return c.allowUseSkill('skill') && (Time.getPhase(t) === Time.Phase.Dawn || Time.getPhase(t) === Time.Phase.Dusk);
+            return c.hasRecalled() && c.allowUseSkill('skill') && (Time.getPhase(t) === Time.Phase.Dawn || Time.getPhase(t) === Time.Phase.Dusk);
         },
         onActiveSkill(c) {
             const dataStore = useDataStore();
@@ -646,6 +649,152 @@ const roles = {
             }
         },
     },
+    Artist: {
+        display: '艺术家',
+        faction: Faction.villager,
+        summery: '“天啊！多么美妙的作品！我的作品……用你们的话怎么说来着……对，璀璨夺目！栩栩如生！没错！”',
+        ability: '每局游戏限一次，在白天时，你可以私下询问说书人一个是非问题，你会得知该问题的答案。',
+        abnormal: {
+            overall: '说书人可能给出错误的答案。',
+        },
+        requiresAI: true,
+        onStart(c) {
+            c.limitSkill('skill', 1);
+        },
+        canActivateSkill(c, t) {
+            return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
+        },
+        async onActiveSkill(c) {
+            const emitter = useEmitter();
+            const dataStore = useDataStore();
+
+            // 循环直到得到有效答案或用户取消
+            while (true) {
+                const question = await emitter.emit('ask-question', {
+                    info: '艺术家：请输入一个是非问题向说书人询问。',
+                });
+                if (question === null || question.trim() === '') {
+                    dataStore.actionPoints += ACTION_COST.skill;
+                    return; // 用户取消，归还行动点
+                }
+
+                // 构建游戏状态前提
+                const premise = buildArtistPremise();
+
+                // 调用 AI
+                const aiConfig = dataStore.getAiConfig();
+                if (!aiConfig) {
+                    await emitter.emit('show-message', {
+                        type: 'warning',
+                        content: 'AI 未配置，无法回答问题。',
+                    });
+                    return;
+                }
+
+                const answer = await callAi(
+                    aiConfig.service,
+                    aiConfig.apiKey,
+                    aiConfig.model,
+                    premise,
+                    question,
+                );
+
+                const parsed = parseArtistAnswer(answer ?? '');
+
+                if (parsed.answer === 'cannot_answer') {
+                    // AI 无法回答，提示用户重新提问，不消耗技能
+                    await emitter.emit('show-message', {
+                        type: 'warning',
+                        content: '说书人无法用"是"或"否"回答此问题，请换一个问题。',
+                    });
+                    continue;
+                }
+
+                // 消耗技能
+                c.useSkill('skill');
+
+                // 神志不清时反转（是↔否，不知道不变）
+                let finalAnswer = parsed.answer;
+                if (!c.isAwake('Artist')) {
+                    if (parsed.answer === '是') finalAnswer = '否';
+                    else if (parsed.answer === '否') finalAnswer = '是';
+                }
+
+                c.info.push(`我问说书人：「${question}」\n回答：${finalAnswer}`);
+                logSkillResolution(
+                    c.id,
+                    `询问：「${question}」→ ${finalAnswer}${parsed.reason ? `（原因：${parsed.reason}）` : ''}${!c.isAwake('Artist') ? '（神志不清，已反转）' : ''}`,
+                );
+                return;
+            }
+        },
+    },
+    Fisherman: {
+        display: '渔夫',
+        faction: Faction.villager,
+        summery: '“这是这条河流里我最喜欢的一截儿……看看阳光是如何让一道彩虹横跨修道院和集市的？这是能让鱼儿长得肥美的最好的地方。我一天天变老，它们也一天天长大。”',
+        ability: '每局游戏限一次，在白天时，你可以让说书人给你一些能帮助你的阵营获胜的建议。',
+        abnormal: {
+            overall: '说书人可能会给出误导性的建议。',
+        },
+        requiresAI: true,
+        onStart(c) {
+            c.limitSkill('skill', 1);
+        },
+        canActivateSkill(c, t) {
+            return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
+        },
+        async onActiveSkill(c) {
+            const emitter = useEmitter();
+            const dataStore = useDataStore();
+
+            const premise = buildFishermanPremise();
+
+            const aiConfig = dataStore.getAiConfig();
+            if (!aiConfig) {
+                await emitter.emit('show-message', {
+                    type: 'warning',
+                    content: 'AI 未配置，无法获取建议。',
+                });
+                return;
+            }
+
+            const adviceGoal = c.isAwake('Fisherman')
+                ? '请给我一些能帮助善良阵营获胜的策略建议。不需要完全基于事实，这是说书人认为对渔夫最有利的行动指引。'
+                : '请给我一些误导性的、对善良阵营**有害的糟糕**建议。';
+
+            const answer = await callAi(
+                aiConfig.service,
+                aiConfig.apiKey,
+                aiConfig.model,
+                premise,
+                `作为说书人，给渔夫一些建议。\n${adviceGoal}`,
+            );
+
+            c.useSkill('skill');
+
+            // 解析 JSON 回答 {"advice": "建议内容", "reason": "原因"}
+            let advice = '（说书人沉默不语）';
+            let reason = '';
+            try {
+                const jsonMatch = answer?.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (parsed.advice) advice = parsed.advice;
+                    if (parsed.reason) reason = parsed.reason;
+                }
+            } catch {
+                advice = answer?.trim() ?? '（说书人沉默不语）';
+            }
+
+            const statusTag = !c.isAwake('Fisherman') ? '（神志不清，获得误导性建议）' : '';
+            c.info.push(`说书人的建议：${advice}`);
+            logSkillResolution(
+                c.id,
+                `获取建议${statusTag}。回答：${advice.substring(0, 60)}。原因：${reason.substring(0, 60)}`,
+            );
+        },
+    },
     Grandma: {
         display: '祖母',
         faction: Faction.villager,
@@ -659,7 +808,7 @@ const roles = {
             ans = randpick(data.charList(), 1, (ch) => !ch.isEvil() && ch.id !== c.id).items[0]!;
             role = ans.role;
             if (!c.isAwake('Grandma')) {
-                ans = randpick(data.charList(), 1, (ch) => ch.isEvilByEvil() && ch.id !== c.id).items[0]!;
+                ans = randpick(data.charList(), 1, (ch) => ch.isTrulyEvil() && ch.id !== c.id).items[0]!;
                 role = ans.getTag(TagType.disguise)[0]?.meta!;
             }
             ans.addTag(TagType.grandson, { source: c.id });
@@ -781,7 +930,7 @@ const roles = {
                     filter(c) {
                         return !c.hasTag(TagType.dead);
                     },
-                    info: '选择一名玩家，若他是::kind::，他死亡。'
+                    info: '::Moonchild::：选择一名玩家，若他是::kind::，他死亡。'
                 })
                     .then((res) => {
                         const obj = res![0];
@@ -919,7 +1068,7 @@ const roles = {
         },
         onNightSkill(c, t) {
             function fn(obj: Character) {
-                if (!obj.isEvilByEvil()) {
+                if (!obj.isTrulyEvil()) {
                     logSkillResolution(c.id, `使得#${obj?.id}（::${obj?.role}::）::poisoned::。`)
                     obj.addTag(TagType.confused, {
                         till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
@@ -984,7 +1133,7 @@ const roles = {
                 return;
             }
             const evilList = dataStore.charList().filter(
-                x => x.isEvilByEvil() && !x.hasTag(TagType.executionImmune) && !x.hasTag(TagType.dead)
+                x => x.isTrulyEvil() && !x.hasTag(TagType.executionImmune) && !x.hasTag(TagType.dead)
             );
             if (evilList.length === 0) {
                 c.info.push('没有可保护的::evil::。');
@@ -1283,3 +1432,181 @@ const roles = {
 export type RoleType = keyof typeof roles;
 
 export const RoleMap: Record<RoleType, IRole> = roles;
+
+// ── 艺术家辅助函数 ──
+
+/** 构建完整的游戏状态前提文本（规则 + 历史 + 当前状态），供 AI 回答问题使用 */
+function buildGameStatePremise(): string {
+    const dataStore = useDataStore();
+    const parts: string[] = [];
+
+    // ── 一、游戏规则 ──
+    parts.push('【游戏规则】');
+    parts.push('你是"说书人"，主持一场类"血染钟楼"的推理游戏。');
+    parts.push('游戏中有以下阵营：');
+    parts.push('- villager（镇民）：善良阵营，拥有各种获取信息或保护的能力。');
+    parts.push('- outsider（外来者）：善良阵营，但能力对善良方不利。');
+    parts.push('- minion（爪牙）：邪恶阵营，辅助恶魔。');
+    parts.push('- demon（恶魔）：邪恶阵营，每晚杀死一名善良玩家。');
+    parts.push('');
+    parts.push('游戏按天进行，每天分为：夜晚→黎明→白天→黄昏。');
+    parts.push('白天玩家可以回忆（recall）得知信息、发动技能、或处决（execute）可疑玩家。');
+    parts.push('处决发生在白天，被处决的玩家会死亡。');
+    parts.push('当恶魔/爪牙全部死亡，善良方获胜；当存活玩家≤2人或声望归零，邪恶方获胜。');
+    parts.push('');
+
+    // ── 四、角色图鉴 ──
+    parts.push('【角色图鉴（所有可能出现的角色及能力）】');
+    parts.push('注意：以下为游戏中所有可能出现的角色，玩家仅扮演其中部分角色。说书人应参考以下所有角色的能力来回答问题。');
+    parts.push('');
+    const sortedRoles = allRoleKeys().filter(k => k !== 'unknown').sort((a, b) => {
+        const order = [Faction.villager, Faction.outsider, Faction.minion, Faction.demon];
+        const fa = RoleMap[a].faction, fb = RoleMap[b].faction;
+        return order.indexOf(fa as any) - order.indexOf(fb as any) || a.localeCompare(b);
+    });
+    for (const key of sortedRoles) {
+        const role = RoleMap[key];
+        const abil = role.ability.replace(/::/g, '').replace(/\n\s*/g, ' ').trim();
+        parts.push(`- ${key}（${role.display}，${role.faction}）：${abil.substring(0, 120)}`);
+    }
+    parts.push('');
+
+    // ── 二、历史事件 ──
+    parts.push('【历史事件】');
+    const events = dataStore.gameLog;
+    if (events.length === 0) {
+        parts.push('（暂无历史事件）');
+    } else {
+        for (const evt of events) {
+            const timeStr = Time.getTimeString(evt.time);
+            const day = Time.getDay(evt.time);
+            const phase = Time.PHASE_NAMES[Time.getPhase(evt.time)];
+            const subjectRole = evt.subject > 0 && evt.subject <= dataStore.playerNumber()
+                ? RoleMap[dataStore.chars.get(evt.subject)?.role ?? 'unknown']?.display
+                : '?';
+            switch (evt.type) {
+                case 'phaseChange':
+                    parts.push(`- 第${day}天${phase}开始`);
+                    break;
+                case 'recall':
+                    parts.push(`- 第${day}天${phase}：#${evt.subject}（${subjectRole}）进行了回忆`);
+                    break;
+                case 'execute':
+                    parts.push(`- 第${day}天${phase}：#${evt.subject}（${subjectRole}）被处决`);
+                    break;
+                case 'death':
+                    parts.push(`- 第${day}天${phase}：#${evt.subject}（${subjectRole}）死亡（死因：${(evt.meta as any).cause ?? '未知'}）`);
+                    break;
+                case 'skillResolution':
+                    parts.push(`- 第${day}天${phase}：#${evt.subject}（${subjectRole}）发动技能：${(evt.meta as any).detail ?? ''}`);
+                    break;
+                case 'reputationChange':
+                    parts.push(`- 第${day}天${phase}：声望变化 ${(evt.meta as any).delta ?? 0}（${(evt.meta as any).reason ?? ''}），当前 ${(evt.meta as any).newValue ?? '?'}`);
+                    break;
+                case 'gameStart':
+                    parts.push(`- 游戏开始，初始角色已分配`);
+                    break;
+                // gameEnd, disguiseChange, confusedChange 可忽略或简要记录
+            }
+        }
+    }
+    parts.push('');
+
+    // ── 三、当前状态 ──
+    parts.push('【当前状态】');
+    parts.push(`当前是第 ${Time.getDay(dataStore.time)} 天，${Time.getTimeString(dataStore.time)}。`);
+    parts.push(`共有 ${dataStore.playerNumber()} 名玩家。`);
+    parts.push('');
+
+    const chars = [...dataStore.chars.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [id, c] of chars) {
+        const role = RoleMap[c.role];
+        const tags: string[] = [];
+        if (c.hasTag(TagType.dead)) tags.push('已死亡');
+        if (c.hasTag(TagType.confused)) tags.push('神志不清（中毒/醉酒）');
+        if (c.hasTag(TagType.disguise)) {
+            const dis = c.getTag(TagType.disguise)[0];
+            tags.push(`伪装身份：${RoleMap[dis?.meta as RoleType]?.display ?? '未知'}`);
+        }
+        const tagStr = tags.length > 0 ? ` [${tags.join('，')}]` : '';
+        parts.push(`玩家 #${id}：${role.display}（${role.faction}）${tagStr}`);
+    }
+
+    return parts.join('\n');
+}
+
+/** 构建艺术家专用的前提（游戏状态 + JSON 回答格式约束） */
+function buildArtistPremise(): string {
+    const base = buildGameStatePremise();
+    return `${base}
+【回答格式】
+你必须仅回复一个 JSON 对象，格式如下：
+{"answer": "是", "reason": "简要原因"}
+{"answer": "否", "reason": "简要原因"}
+{"answer": "我不知道", "reason": "简要原因"}
+{"answer": "无法回答", "reason": "简短原因"}
+不要输出任何其他内容，只输出 JSON。
+
+例子：
+1. 
+问：#3 是恶魔吗？
+答：{"answer": "是", "reason": "#3 是小恶魔，他的能力会在夜晚杀死善良阵营的玩家。"}
+2. 
+问：#5 是镇民吗？
+答：{"answer": "否", "reason": "#5 是下毒者，他是镇民，他的能力会使周围的善良阵营玩家中毒。"}
+3. 
+问：1+1=2吗？
+答：{"answer": "是", "reason": "1+1=2是一个基本的数学事实。"}
+`;
+}
+
+/** 解析 AI 的 JSON 回答，返回 { answer: '是'|'否'|'我不知道'|'cannot_answer', reason: string } */
+function parseArtistAnswer(raw: string): { answer: '是' | '否' | '我不知道' | 'cannot_answer'; reason: string } {
+    try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('no json');
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        const answer = (parsed.answer ?? '').trim();
+        const reason = (parsed.reason ?? '').trim();
+
+        if (answer === '是') return { answer: '是', reason };
+        if (answer === '否') return { answer: '否', reason };
+        if (answer === '我不知道') return { answer: '我不知道', reason };
+        return { answer: 'cannot_answer', reason };
+    } catch {
+        // JSON 解析失败，尝试正则匹配作为降级方案
+        const text = raw.trim();
+        if (/不知道|不清楚|无法确定|未知|don['']?t\s*know|unknown|not\s+sure/i.test(text)) {
+            return { answer: '我不知道', reason: '' };
+        }
+        if (/^是|[\s,，。.!！?？]是|yes|correct|true|right/i.test(text)) {
+            return { answer: '是', reason: '' };
+        }
+        if (/^否|^不是|[\s,，。.!！?？]否|[\s,，。.!！?？]不是|no\b|false|wrong|incorrect/i.test(text)) {
+            return { answer: '否', reason: '' };
+        }
+        return { answer: 'cannot_answer', reason: '' };
+    }
+}
+
+/** 构建渔夫专用的状态前提（游戏状态 + 建议回答要求） */
+function buildFishermanPremise(): string {
+    const base = buildGameStatePremise();
+    return `${base}
+【回答要求】
+作为说书人，给渔夫一些能帮助善良阵营获胜的策略建议。
+这些建议不需要严格基于事实，你是说书人，你在指引渔夫做出最有利于他阵营的选择。
+请用中文回复，只输出以下 JSON 格式（不要输出其他内容）：
+{"advice": "具体建议内容", "reason": "给出此建议的原因"}
+请注意，建议（\`advice\`）**不要**包含理由，也不要包含上述【历史事件】和【当前状态】的内容。（玩家并不知道【历史事件】和【当前状态】的内容，这些只有说书人知道。）
+给渔夫建议的最好方式是让他做什么，而不是“是什么”信息。这让渔夫这个角色更有趣也更与众不同。
+例如，建议“你应该处决那个玩家”，或者“保护那名玩家”，或者“找到醉酒的玩家”，或者“颠覆你之前的想法”，或者“忽略爪牙们的存在”，或者“相信哪名玩家”。这些建议会比“这名玩家是邪恶的”或者“恶魔是小恶魔”更有趣。
+以下是建议的示例：
+1. {"advice": "你不应该相信 #8", "reason": "#8 是中毒的共情者，他的信息出现了错误。"}
+2. {"advice": "你应该保护 #3", "reason": "#3 是教授，他的技能很有用。"}
+3. {"advice": "你应该处决 #5", "reason": "#5 是恶魔，他的能力会在夜晚杀死善良阵营的玩家。"}
+4. {"advice": "你应该处决 #2", "reason": "#2 是镇民，但由于渔夫神志不清，我给了他糟糕的建议。"}
+5. {"advice": "你不应该处决 #7", "reason": "#7 是酒鬼，虽然他的信息可能会误导你，但他是善良玩家。"}
+`;
+}

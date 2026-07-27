@@ -1,42 +1,47 @@
 # Demon
 
-This template should help get you started developing with Vue 3 in Vite.
+基于 Vue 3 + TypeScript + Vite 构建的**血染钟楼（Blood on the Clocktower）**风格单机推理游戏。在本地浏览器中沉浸式体验推理流程。
 
-## Recommended IDE Setup
+## ✨ 特性
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- 🎭 **完整角色体系** — 涵盖镇民、外来者、爪牙、恶魔四大阵营，每个角色拥有独特的夜间技能与被动能力
+- 🌙 **昼夜交替模拟** — 自动推进游戏阶段（夜晚 → 黎明 → 白天 → 黄昏），按优先级执行夜间行动
+- 🏷️ **Tag 状态系统** — 灵活的标签机制：死亡、濒死、神志不清、伪装、处决免疫等，支持自定义交互规则
+- 📜 **Markdown 能力描述** — 角色能力使用 Markdown 渲染，支持关键词语法，悬浮显示详细说明
+- 🎲 **可配置开局** — 支持自定义各阵营人数，随机分配角色，并为邪恶阵营伪装身份
+- 🔍 **说书人面板** — 左侧纸张视图展示完整游戏日志，右侧玩家面板管理角色状态与技能触发
 
-## Recommended Browser Setup
+## 🛠 技术栈
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+| 技术                                                      | 用途                                           |
+| --------------------------------------------------------- | ---------------------------------------------- |
+| [Vue 3](https://vuejs.org/)                               | 前端框架（Composition API + `<script setup>`） |
+| [TypeScript](https://www.typescriptlang.org/)             | 类型安全                                       |
+| [Vite](https://vite.dev/)                                 | 构建工具与开发服务器                           |
+| [Pinia](https://pinia.vuejs.org/)                         | 状态管理                                       |
+| [Naive UI](https://www.naiveui.com/)                      | UI 组件库                                      |
+| [markdown-it](https://github.com/markdown-it/markdown-it) | Markdown 渲染                                  |
 
-## Type Support for `.vue` Imports in TS
+## 🎮 玩法简介
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+1. 启动后进入**游戏开始**界面，可调整各阵营人数：
+    - 🏘️ 镇民（Villager）：默认 6 人
+    - 🌙 外来者（Outsider）：默认 2 人
+    - 🗡️ 爪牙（Minion）：默认 1 人
+    - 😈 恶魔（Demon）：默认 1 人
+2. 点击开始后，角色随机分配，邪恶阵营自动获得伪装身份
+3. 游戏自动推进昼夜阶段，角色按优先级执行夜间技能
+4. 左侧日志面板实时记录所有事件（死亡、技能、声望变化等）
+5. 满足以下任一条件游戏结束：
+    - ✅ 所有邪恶阵营被消灭 → **善良方获胜**
+    - ❌ 存活人数 ≤ 2 → **邪恶方获胜**
+    - ❌ 声望归零 → **被放逐**
 
-## Customize configuration
+## 特别感谢
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+- 游戏想法借鉴 [Demon Bluff](https://store.steampowered.com/app/3522600/_Demon_Bluff/)
+- 游戏背景及部分玩法借鉴[染钟楼谜团](https://clocktower.gstonegames.com/)
 
-## Project Setup
+## 代办
 
-```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
+- 选择玩家时自动选中发起者

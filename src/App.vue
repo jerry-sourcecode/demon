@@ -4,7 +4,9 @@
 			<GameStart v-if="!started" @start="started = true" />
 			<n-split v-else class="main" :default-size="0.25">
 				<template #1><Paper /></template>
-				<template #2><PlayerPanel /></template>
+				<template #2
+					><PlayerPanel @go-home="started = false"
+				/></template>
 			</n-split>
 		</NDialogProvider>
 	</NMessageProvider>
