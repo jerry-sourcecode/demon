@@ -26,8 +26,20 @@
 				>✏️</n-button
 			>
 			<template v-if="drawMode">
-				<n-button size="tiny" @click="undoDraw">↩</n-button>
-				<n-button size="tiny" @click="clearDraw">🗑</n-button>
+				<n-button
+					size="tiny"
+					ghost
+					@click="undoDraw"
+					style="color: #eee; border-color: rgba(255, 255, 255, 0.4)"
+					>↩</n-button
+				>
+				<n-button
+					size="tiny"
+					ghost
+					@click="clearDraw"
+					style="color: #eee; border-color: rgba(255, 255, 255, 0.4)"
+					>🗑</n-button
+				>
 				<div class="draw-color-wrap">
 					<n-color-picker
 						v-model:value="drawColor"
@@ -180,6 +192,9 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 	background: rgba(30, 30, 30, 0.85);
 	padding: 6px 12px;
 	border-radius: 8px;
+}
+.draw-float-bar :deep(.n-button) {
+	color: #eee;
 }
 .draw-color-wrap {
 	width: 90px;

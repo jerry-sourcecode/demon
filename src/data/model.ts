@@ -4,12 +4,12 @@ import { TAG_RULES } from "./tag";
 import type { IRole } from "./roles";
 import { RoleMap } from "./roles";
 import type { RoleType } from "./roles";
-import { Faction } from "./roles";
+import { Faction, Alignment } from "./roles";
 import { useDataStore } from "../store/value";
 import { allRoleKeys, randpick } from "@/utils/utils";
 
 export type { IRole, RoleType } from "./roles";
-export { RoleMap, Faction } from "./roles";
+export { RoleMap, Faction, Alignment } from "./roles";
 
 // ── Tag meta 类型系统 ──
 
@@ -45,6 +45,8 @@ type TypedTag<T extends TagType = TagType> = {
 export class Character {
     id: number;
     role: RoleType;
+    /** 阵营，独立于角色类型 */
+    alignment: Alignment;
     info: string[];
     displayRole: RoleType;
     tags: ITag[];
@@ -58,6 +60,7 @@ export class Character {
     constructor(id: number, role: RoleType) {
         this.id = id;
         this.role = role;
+        this.alignment = Alignment.good;
         this.info = [];
         this.displayRole = 'unknown';
         this.tags = [];
@@ -87,15 +90,14 @@ export class Character {
         return RoleMap[this.role];
     }
 
-    /** 判断是否为邪恶阵营（含陌客） */
+    /** 判断是否为邪恶阵营（含清醒的陌客） */
     isEvil(): boolean {
-        const fac = RoleMap[this.role]?.faction;
-        return fac === Faction.minion || fac === Faction.demon || (this.role === 'Recluse' && !this.hasTag(TagType.confused));
+        return this.alignment === Alignment.evil || (this.role === 'Recluse' && this.isAwake('Recluse'));
     }
 
+    /** 真正的邪恶（仅按 alignment 判断） */
     isTrulyEvil(): boolean {
-        const fac = RoleMap[this.role]?.faction;
-        return fac === Faction.minion || fac === Faction.demon;
+        return this.alignment === Alignment.evil;
     }
 
     /** 获取指定类型的所有未过期 Tag（meta 类型自动收窄） */

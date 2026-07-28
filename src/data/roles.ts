@@ -5,7 +5,7 @@ import { useDataStore, ACTION_COST } from "../store/value";
 import { useEmitter } from "../store/emit";
 import { allRoleKeys, randint, randpick, swap } from "@/utils/utils";
 import { ref } from "vue";
-import { logReputationChange, logSkillResolution, logGameEnd } from "./gameLog";
+import { logReputationChange, logSkillResolution, logGameEnd, logSkillActivate } from "./gameLog";
 import { callAi } from "@/utils/ai";
 
 export interface IRole {
@@ -64,6 +64,14 @@ export const Faction = {
 } as const;
 
 export type Faction = typeof Faction[keyof typeof Faction];
+
+/** 阵营（善良/邪恶），与角色类型独立 */
+export const Alignment = {
+    good: "good",
+    evil: "evil",
+} as const;
+
+export type Alignment = typeof Alignment[keyof typeof Alignment];
 
 const _store = new Map<number, number>();
 
@@ -163,17 +171,17 @@ const roles = {
             let cnt_l = ref(0), cnt_r = ref(0);
             for (let i = 1; i <= half; i++) {
                 if (dataStore.chars.get(i)?.isEvil()) {
-                    cnt_l.value++;
+                    cnt_r.value++;
                 }
             }
             for (let i = half + 1; i <= dataStore.playerNumber(); i++) {
                 if (dataStore.chars.get(i)?.isEvil()) {
-                    cnt_r.value++;
+                    cnt_l.value++;
                 }
             }
             if (dataStore.chars.get(1)?.isEvil()) cnt_r.value++;
 
-            if (c.hasTag(TagType.confused, TagType.disguise)) {
+            if (!c.isAwake('Architect')) {
                 if (cnt_l.value !== cnt_r.value) {
                     if (randint(0, 3)) {
                         swap(cnt_l, cnt_r);
@@ -837,6 +845,8 @@ const roles = {
             });
             if (!chosen || chosen.length < 1) return;
 
+            logSkillActivate(c.id);
+
             if (!c.isAwake('Monk')) {
                 logSkillResolution(c.id, `选择了 #${chosen[0]!.id}，但是由于神志不清，技能未能生效。`);
                 return;
@@ -866,6 +876,8 @@ const roles = {
                 required: true,
             });
             if (!chosen || chosen.length < 2) return;
+
+            logSkillActivate(c.id);
 
             if (!c.isAwake('Innkeeper')) {
                 logSkillResolution(c.id, `选择了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，但是由于神志不清，技能未能生效。`);
@@ -934,6 +946,7 @@ const roles = {
                 })
                     .then((res) => {
                         const obj = res![0];
+                        logSkillActivate(c.id);
                         if (obj?.isEvil() || !c.isAwake('Moonchild')) {
                             c.info.push(`对 #${obj?.id} 发动技能，无事发生。`)
                             logSkillResolution(c.id, `对 #${obj?.id} 发动，无事发生`);

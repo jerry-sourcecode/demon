@@ -14,6 +14,7 @@ export type GameEventType =
     | 'disguiseChange'
     | 'reputationChange'
     | 'skillResolution'
+    | 'skillActivate'
     | 'gameEnd'
     | 'confusedChange';
 
@@ -64,6 +65,10 @@ interface SkillResolutionMeta {
     role: RoleType;
 }
 
+interface SkillActivateMeta {
+    /** 无额外信息，仅记录谁发动了技能 */
+}
+
 interface GameEndMeta {
     win: boolean;
     reputation: number;
@@ -91,6 +96,7 @@ export type GameEventMeta =
     | DisguiseChangeMeta
     | ReputationChangeMeta
     | SkillResolutionMeta
+    | SkillActivateMeta
     | GameEndMeta
     | ConfusedChangeMeta;
 
@@ -176,6 +182,11 @@ export function logDisguiseChange(subject: number, oldRole?: RoleType, newRole?:
 export function logReputationChange(delta: number, reason: string): void {
     const dataStore = useDataStore();
     addLog('reputationChange', 0, { delta, reason, newValue: dataStore.reputation });
+}
+
+/** 记录主动技能发动（信息面板显示，复盘隐藏） */
+export function logSkillActivate(subject: number): void {
+    addLog('skillActivate', subject, {});
 }
 
 export function logSkillResolution(subject: number, detail: string): void {

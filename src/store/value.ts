@@ -26,10 +26,9 @@ export const useDataStore = defineStore('data', () => {
 
     /** 尚存活的真正邪恶角色（仅恶魔和爪牙，陌客不算） */
     const evilAlive = computed(() =>
-        [...chars.value.values()].filter(c => {
-            const fac = RoleMap[c.role]?.faction;
-            return (fac === Faction.demon || fac === Faction.minion) && !c.hasTag(TagType.dead);
-        })
+        [...chars.value.values()].filter(c =>
+            c.isTrulyEvil() && !c.hasTag(TagType.dead)
+        )
     );
 
     /** 游戏日志（复盘数据） */

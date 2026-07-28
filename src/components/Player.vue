@@ -182,7 +182,12 @@ import { Time } from "@/utils/time";
 import { runFn } from "@/utils/utils.ts";
 import AbilityMd from "./AbilityMd.vue";
 import { TagType } from "@/data/tag.ts";
-import { logRecall, logExecute, logSkillResolution } from "@/data/gameLog";
+import {
+	logRecall,
+	logExecute,
+	logSkillResolution,
+	logSkillActivate,
+} from "@/data/gameLog";
 
 const dataStore = useDataStore();
 const dialog = useDialog();
@@ -345,6 +350,7 @@ async function onSkill() {
 	// 白天消耗行动点，黎明/黄昏不消耗
 	const isDay = Time.getPhase(dataStore.time) === Time.Phase.Day;
 	if (isDay && !dataStore.spendActionPoints(ACTION_COST.skill)) return;
+	logSkillActivate(props.data.id);
 	await RoleMap[props.data.displayRole]?.onActiveSkill?.(props.data);
 	emit("action-done");
 }

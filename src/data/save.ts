@@ -1,7 +1,7 @@
 import type { GameEvent } from "./gameLog";
 import { setLog } from "./gameLog";
 import type { MatchConfig } from "./match";
-import { Character, type RoleType } from "./model";
+import { Character, type RoleType, Alignment } from "./model";
 import type { TagType } from "./tag";
 import type { Time } from "@/utils/time";
 
@@ -19,6 +19,7 @@ function restoreTill(t: number | string): number {
 export interface CharSaveData {
     id: number;
     role: RoleType;
+    alignment: Alignment;
     info: string[];
     displayRole: RoleType;
     tags: { type: TagType; till: Time.TimeNumber; source?: number; meta?: any }[];
@@ -65,6 +66,7 @@ export function serializeChars(
         result.push({
             id,
             role: c.role,
+            alignment: c.alignment,
             info: [...c.info],
             displayRole: c.displayRole,
             tags: c.tags.map((t) => ({
@@ -89,6 +91,7 @@ export function deserializeChars(
     const map = new Map<number, Character>();
     for (const d of data) {
         const c = new Character(d.id, d.role);
+        c.alignment = d.alignment ?? Alignment.good;
         c.info = [...d.info];
         c.displayRole = d.displayRole;
         c.tags = d.tags.map((t) => ({

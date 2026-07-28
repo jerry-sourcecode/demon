@@ -1,5 +1,5 @@
 import { useEmitter } from "./store/emit";
-import { Character, Faction, pickRoles, RoleMap, shuffle, type RoleType } from "./data/model";
+import { Character, Faction, Alignment, pickRoles, RoleMap, shuffle, type RoleType } from "./data/model";
 import { useDataStore } from "./store/value";
 import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
@@ -81,6 +81,10 @@ export async function start(matchConfig: MatchConfig) {
     player.forEach(x => {
         idx++;
         const c = new Character(idx, x);
+        // 根据角色类型设置默认阵营
+        const defaultFac = RoleMap[x]?.faction;
+        c.alignment = (defaultFac === Faction.demon || defaultFac === Faction.minion)
+            ? Alignment.evil : Alignment.good;
         dataStore.chars.set(idx, c);
         if (c.isEvil() && c.role !== 'Recluse') {
             const { items, indices } = randpick(disguiseRoleList)

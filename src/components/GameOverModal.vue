@@ -428,6 +428,7 @@ interface DayGroup {
 const dayGroups = computed<DayGroup[]>(() => {
 	const groups = new Map<number, GameEvent[]>();
 	for (const event of props.record.events) {
+		if (event.type === "skillActivate") continue; // 信息面板专用，复盘隐藏
 		const day = Time.getDay(event.time);
 		if (!groups.has(day)) groups.set(day, []);
 		groups.get(day)!.push(event);

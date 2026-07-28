@@ -294,6 +294,7 @@ onUnmounted(() => {
 	document.removeEventListener("keydown", onKeyDown);
 });
 
+emitter.off("game-start");
 emitter.on("game-start", () => {
 	setTimeout(() => {
 		isDealt.value = true;
@@ -306,6 +307,10 @@ if (dataStore.time !== Time.NOT_STARTED) {
 		isDealt.value = true;
 	}, 100);
 }
+
+onUnmounted(() => {
+	emitter.off("game-start");
+});
 
 // ── 游戏结束 ──
 
