@@ -41,9 +41,13 @@ function swapRoles(from: Faction, to: Faction, count: number) {
         dataStore.charList().filter(c => c.getRoleDetail().faction === to).map(c => c.role)
     );
     let absent = allTo.filter(r => !presentTo.has(r));
-    const targets = randpick(
-        dataStore.charList().filter(c => c.getRoleDetail().faction === from), count
-    ).items;
+    const fromChars = dataStore.charList().filter(c => c.getRoleDetail().faction === from);
+    // 不能超过可用角色数
+    const actualCount = Math.min(count, fromChars.length);
+    if (actualCount < count) {
+        console.warn(`swapRoles: 请求交换 ${count} 个 ${from}，但仅有 ${fromChars.length} 个可用，实际交换 ${actualCount} 个。`);
+    }
+    const targets = randpick(fromChars, actualCount).items;
     for (const t of targets) {
         if (absent.length === 0) break;
         t.role = randpick(absent).items[0]!;
@@ -67,7 +71,8 @@ export async function start(matchConfig: MatchConfig) {
     let player: RoleType[] = [];
     player.push(...pickRoles(Faction.villager, vc));
     player.push(...pickRoles(Faction.outsider, oc));
-    player.push(...pickRoles(Faction.minion, mc));
+    // player.push(...pickRoles(Faction.minion, mc));
+    player.push('Baron', 'GodFather');
     player.push(...pickRoles(Faction.demon, dc));
     player = shuffle(player);
 
@@ -168,6 +173,75 @@ export async function start(matchConfig: MatchConfig) {
         if (tg) runFn(RoleMap[tg.meta].onStart, x)
     });
 
+    await runGameLoop(dataStore, emitter);
+}
+
+/**
+ * 读档后恢复游戏循环，处理当前阶段后继续循环
+ */
+export async function resume() {
+    const dataStore = useDataStore();
+    const emitter = useEmitter();
+
+    // 处理当前阶段（不 advance time）
+    await processCurrentPhase(dataStore, emitter);
+
+    // 继续主循环
+    await runGameLoop(dataStore, emitter);
+}
+
+/** 处理当前时段（不 advance time） */
+async function processCurrentPhase(
+    dataStore: ReturnType<typeof useDataStore>,
+    emitter: ReturnType<typeof useEmitter>,
+): Promise<boolean> {
+    if (dataStore.gameOver) return true;
+    if (checkGameEnd(dataStore, emitter)) return true;
+
+    const phase = Time.getPhase(dataStore.time);
+    if (phase === Time.Phase.Night) {
+        // 夜间已由之前的循环处理过，直接跳过
+        return false;
+    }
+
+    // onTimeChange
+    dataStore.chars.forEach(x => {
+        if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
+        runFn(RoleMap[x.role].onTimeChange, x, dataStore.time);
+        const tg = x.getTag(TagType.disguise)[0];
+        if (tg) runFn(RoleMap[tg.meta].onTimeChange, x, dataStore.time);
+    });
+
+    if (phase === Time.Phase.Day) {
+        // 白天：如果有行动力就进入操作循环
+        while (dataStore.actionPoints > 0 && !dataStore.gameOver) {
+            await emitter.emit('wait-for-action');
+            if (checkGameEnd(dataStore, emitter)) return true;
+        }
+    } else {
+        // 黎明/黄昏：检查是否有可发动的技能
+        let needMove = false;
+        dataStore.chars.forEach(x => {
+            if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
+            if (runFn(RoleMap[x.role].canActivateSkill, x, dataStore.time)) needMove = true;
+            if (x.hasTag(TagType.disguise)) {
+                const dis_role = x.getTag(TagType.disguise)[0]!.meta;
+                if (runFn(RoleMap[dis_role].canActivateSkill, x, dataStore.time)) needMove = true;
+            }
+        });
+        if (needMove && !dataStore.gameOver) {
+            await emitter.emit('wait-for-action');
+            if (checkGameEnd(dataStore, emitter)) return true;
+        }
+    }
+    return false;
+}
+
+/** 主游戏循环（每次迭代 advance time 一次） */
+async function runGameLoop(
+    dataStore: ReturnType<typeof useDataStore>,
+    emitter: ReturnType<typeof useEmitter>,
+) {
     let gameEnded = false;
     while (!gameEnded) {
         dataStore.nextTime();
@@ -249,6 +323,6 @@ export async function start(matchConfig: MatchConfig) {
                 gameEnded = true;
             }
         }
-        await sleep(0.3);
+        await sleep(0.2);
     }
 }

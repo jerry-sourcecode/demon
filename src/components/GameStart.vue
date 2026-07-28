@@ -5,6 +5,14 @@
 
 		<div class="actions">
 			<n-button
+				v-if="hasSave"
+				type="success"
+				size="large"
+				@click="onContinue"
+				style="width: 100%; margin-bottom: 8px"
+				>▶ 继续游戏</n-button
+			>
+			<n-button
 				type="primary"
 				size="large"
 				@click="onStart"
@@ -218,7 +226,7 @@ import {
 	NDivider,
 	type UploadOnChange,
 } from "naive-ui";
-import { start } from "@/game.ts";
+import { start, resume } from "@/game.ts";
 import { useDataStore } from "@/store/value";
 import { useMatchStore } from "@/store/matchStore";
 import type { MatchConfig, MatchRecord } from "@/data/match";
@@ -238,6 +246,15 @@ const importError = ref("");
 
 const dataStore = useDataStore();
 const matchStore = useMatchStore();
+
+const hasSave = ref(false);
+
+// 检查是否有存档
+function checkSave() {
+	hasSave.value = dataStore.hasSaveGame();
+}
+
+checkSave();
 
 // ── 游戏配置 ──
 
@@ -297,9 +314,24 @@ function onSaveAiConfig() {
 	showConfig.value = false;
 }
 
+// ── 继续游戏 ──
+
+async function onContinue() {
+	const ok = dataStore.loadGame();
+	if (!ok) {
+		hasSave.value = false;
+		return;
+	}
+	emit("start");
+	await nextTick();
+	resume();
+}
+
 // ── 开始游戏 ──
 
 async function onStart() {
+	dataStore.deleteSaveGame();
+	hasSave.value = false;
 	emit("start");
 	await nextTick();
 	start(matchStore.matchConfig);

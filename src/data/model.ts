@@ -48,6 +48,10 @@ export class Character {
     info: string[];
     displayRole: RoleType;
     tags: ITag[];
+    /** 玩家自定义标签（预设，对应圆点） */
+    customTags: string[];
+    /** 玩家自定义文本标签（自由输入） */
+    dynamicTags: string[];
     /** 限次技能使用记录 */
     private _skillUses: Map<string, { used: number; max: number }>;
 
@@ -57,6 +61,8 @@ export class Character {
         this.info = [];
         this.displayRole = 'unknown';
         this.tags = [];
+        this.customTags = [];
+        this.dynamicTags = [];
         this._skillUses = new Map();
     }
 

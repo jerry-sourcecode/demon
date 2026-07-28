@@ -37,7 +37,10 @@ export function randpick<T>(
     const pool = filter
         ? ls.map((v, i) => ({ v, i })).filter(({ v, i }) => filter(v, i))
         : ls.map((v, i) => ({ v, i }));
-    if (count > pool.length) throw new Error(`randpick: 无法从 ${pool.length} 个元素中选取 ${count} 个`);
+    if (count > pool.length) {
+        console.warn(`randpick: 请求 ${count} 个元素，但池中仅有 ${pool.length} 个，已返回全部。`, new Error().stack);
+        count = pool.length;
+    }
     const indices: number[] = [];
     const items: T[] = [];
     for (let k = 0; k < count; k++) {

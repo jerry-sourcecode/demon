@@ -3,7 +3,9 @@ import { RoleMap, Faction, type Character, type RoleType } from '../data/model'
 import { ref, type Ref, computed } from 'vue';
 import { Time } from '../utils/time';
 import { TagType } from '../data/tag';
-import { gameLog as getLog, clearLog, type GameEvent, logPhaseChange } from '../data/gameLog'; import type { MatchConfig } from '../data/match';
+import { gameLog as getLog, clearLog, setLog, type GameEvent, logPhaseChange } from '../data/gameLog';
+import type { MatchConfig } from '../data/match';
+import { saveGame as saveToStorage, loadGame as loadFromStorage, hasSaveGame as hasSaveInStorage, deleteSave as removeSave, deserializeChars } from '../data/save';
 export const ACTION_COST = {
     skill: 2,
     execute: 3,
@@ -135,6 +137,8 @@ export const useDataStore = defineStore('data', () => {
     }
 
     function resetGame() {
+        // 清空角色自定义标签
+        chars.value.forEach(c => { c.customTags = []; c.dynamicTags = []; });
         chars.value = new Map();
         time.value = Time.NOT_STARTED;
         reputation.value = 0;
@@ -143,8 +147,61 @@ export const useDataStore = defineStore('data', () => {
         knownGoodRoles.value = new Set();
         possibleEvil.value = [];
         currentMatchConfig.value = null;
+        // 清空角色自定义标签
+        chars.value.forEach(c => { c.customTags = []; c.dynamicTags = []; });
         clearLog();
     }
 
-    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig }
+    // ── 存档 ──
+
+    function saveGame() {
+        saveToStorage(
+            chars.value,
+            time.value,
+            reputation.value,
+            actionPoints.value,
+            maxActionPoints.value,
+            gameOver.value,
+            gameLog.value,
+            knownGoodRoles.value,
+            possibleEvil.value,
+            villagerMin.value,
+            villagerMax.value,
+            outsiderMin.value,
+            outsiderMax.value,
+            currentMatchConfig.value,
+            initCounts.value,
+        );
+    }
+
+    function loadGame(): boolean {
+        const data = loadFromStorage();
+        if (!data) return false;
+        chars.value = deserializeChars(data.chars);
+        time.value = data.time;
+        reputation.value = data.reputation;
+        actionPoints.value = data.actionPoints;
+        maxActionPoints.value = data.maxActionPoints;
+        gameOver.value = data.gameOver;
+        setLog(data.gameLog);
+        knownGoodRoles.value = new Set(data.knownGoodRoles);
+        possibleEvil.value = data.possibleEvil;
+        villagerMin.value = data.villagerMin;
+        villagerMax.value = data.villagerMax;
+        outsiderMin.value = data.outsiderMin;
+        outsiderMax.value = data.outsiderMax;
+        currentMatchConfig.value = data.currentMatchConfig;
+        initCounts.value = data.initCounts;
+        return true;
+    }
+
+    function hasSaveGame(): boolean {
+        return hasSaveInStorage();
+    }
+
+    function deleteSaveGame(): void {
+        removeSave();
+    }
+
+    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
 })

@@ -103,8 +103,8 @@
 			:show-actions="true"
 			@restart="onRestart"
 			@go-home="onGoHome" />
-		<!-- Tab 身份参考面板 -->
-		<RoleSheet v-model:show="showRoleSheet" />
+		<!-- 身份菜单 -->
+		<RoleMenu v-model:show="showRoleSheet" @go-home="onGoHome" />
 
 		<!-- 艺术家问题对话框 -->
 		<n-modal
@@ -160,10 +160,11 @@ import {
 import { ACTION_COST, useDataStore } from "@/store/value.ts";
 import { useEmitter } from "@/store/emit.ts";
 import { Faction, type Character } from "@/data/model";
+import { Time } from "@/utils/time";
 import { UniqueQueue } from "@/utils/utils";
 import AbilityMd from "./AbilityMd.vue";
 import GameOverModal from "./GameOverModal.vue";
-import RoleSheet from "./RoleSheet.vue";
+import RoleMenu from "./RoleMenu.vue";
 import { start } from "@/game.ts";
 import { useMatchStore } from "@/store/matchStore";
 import { DEFAULT_MATCH_CONFIG, type MatchRecord } from "@/data/match";
@@ -276,7 +277,7 @@ onMounted(() => {
 	}
 });
 
-// ── Tab 身份面板 ──
+// ── 身份菜单 ──
 
 const showRoleSheet = ref(false);
 
@@ -298,6 +299,13 @@ emitter.on("game-start", () => {
 		isDealt.value = true;
 	}, 100);
 });
+
+// 读档恢复时也触发发牌动画
+if (dataStore.time !== Time.NOT_STARTED) {
+	setTimeout(() => {
+		isDealt.value = true;
+	}, 100);
+}
 
 // ── 游戏结束 ──
 
@@ -326,6 +334,7 @@ emitter.on("game-end", (win) => {
 });
 
 function onRestart() {
+	dataStore.deleteSaveGame();
 	dataStore.resetGame();
 	start(useMatchStore().matchConfig);
 }
@@ -352,7 +361,9 @@ emitter.on("wait-for-action", () => {
 });
 
 function finishAction() {
-	waitRes.value!();
+	if (!waitRes.value) return;
+	waitRes.value();
+	waitRes.value = null;
 	midDoneBtn.value = false;
 	midDisplay.value = false;
 }

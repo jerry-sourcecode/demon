@@ -2,12 +2,17 @@
 	<NMessageProvider>
 		<NDialogProvider>
 			<GameStart v-if="!started" @start="started = true" />
-			<n-split v-else class="main" :default-size="0.25">
-				<template #1><Paper /></template>
-				<template #2
-					><PlayerPanel @go-home="started = false"
-				/></template>
-			</n-split>
+			<template v-else>
+				<div class="main">
+					<n-split :default-size="0.25">
+						<template #1><Paper /></template>
+						<template #2
+							><PlayerPanel @go-home="started = false"
+						/></template>
+					</n-split>
+					<DrawingOverlay />
+				</div>
+			</template>
 		</NDialogProvider>
 	</NMessageProvider>
 </template>
@@ -18,6 +23,7 @@ import { NSplit, NDialogProvider, NMessageProvider } from "naive-ui";
 import Paper from "./components/Paper.vue";
 import PlayerPanel from "./components/PlayerPanel.vue";
 import GameStart from "./components/GameStart.vue";
+import DrawingOverlay from "./components/DrawingOverlay.vue";
 
 const started = ref(false);
 </script>
@@ -26,5 +32,6 @@ const started = ref(false);
 .main {
 	height: 100vh;
 	width: 100vw;
+	position: relative;
 }
 </style>

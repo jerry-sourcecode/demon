@@ -111,8 +111,12 @@
 						配置：{{ record.config.villager }} 镇民
 						{{ record.config.outsider }} 外来者
 						{{ record.config.minion }} 爪牙
-						{{ record.config.demon }} 恶魔 ｜行动力
-						{{ record.config.actionPoints }} ｜初始声望
+						{{ record.config.demon }} 恶魔
+						<NDivider vertical />
+						行动力
+						{{ record.config.actionPoints }}
+						<NDivider vertical />
+						初始声望
 						{{ record.config.reputation }}
 					</div>
 
@@ -228,6 +232,7 @@ import {
 	NTimelineItem,
 	NEmpty,
 	useMessage,
+	NDivider,
 } from "naive-ui";
 import { RoleMap, Faction, type RoleType } from "@/data/model";
 import { FACTION_COLORS } from "@/data/keywords";
