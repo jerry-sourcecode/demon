@@ -82,3 +82,9 @@ n-card内的内容默认拉伸占满n-card，如果想要禁用拉伸，在n-car
         width: 100%;
     }
 }
+
+.icon {
+    top: 2px;
+    position: relative;
+    margin-right: 4px;
+}

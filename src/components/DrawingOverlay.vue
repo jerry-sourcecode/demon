@@ -2,8 +2,8 @@
 	<div class="draw-container">
 		<!-- 全屏画布 -->
 		<div
-			v-if="drawMode"
 			class="draw-overlay"
+			:class="{ 'draw-overlay--interactive': drawMode }"
 			@mousedown="onDrawStart"
 			@mousemove="onDrawMove"
 			@mouseup="onDrawEnd"
@@ -23,23 +23,23 @@
 				:type="drawMode ? 'primary' : 'default'"
 				@click="toggleDraw"
 				title="绘图标注"
-				>✏️</n-button
-			>
+				><IconPencil
+			/></n-button>
 			<template v-if="drawMode">
 				<n-button
 					size="tiny"
 					ghost
 					@click="undoDraw"
 					style="color: #eee; border-color: rgba(255, 255, 255, 0.4)"
-					>↩</n-button
-				>
+					><IconUndo
+				/></n-button>
 				<n-button
 					size="tiny"
 					ghost
 					@click="clearDraw"
 					style="color: #eee; border-color: rgba(255, 255, 255, 0.4)"
-					>🗑</n-button
-				>
+					><IconDelete
+				/></n-button>
 				<div class="draw-color-wrap">
 					<n-color-picker
 						v-model:value="drawColor"
@@ -61,6 +61,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from "vue";
 import { NButton, NColorPicker } from "naive-ui";
+import { IconPencil, IconUndo, IconDelete } from "@iconify-prerendered/vue-mdi";
 
 const drawMode = ref(false);
 const drawColor = ref("#f7c94f");
@@ -69,6 +70,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 let ctx: CanvasRenderingContext2D | null = null;
 let drawing = false;
 let drawHistory: ImageData[] = [];
+let canvasInitialized = false;
 
 function toggleDraw() {
 	drawMode.value = !drawMode.value;
@@ -78,16 +80,21 @@ function toggleDraw() {
 function initCanvas() {
 	const c = canvasRef.value;
 	if (!c) return;
-	c.width = window.innerWidth;
-	c.height = window.innerHeight;
-	ctx = c.getContext("2d");
-	if (ctx) {
-		ctx.strokeStyle = drawColor.value;
-		ctx.lineWidth = 3;
-		ctx.lineCap = "round";
-		ctx.lineJoin = "round";
+	if (!canvasInitialized) {
+		c.width = window.innerWidth;
+		c.height = window.innerHeight;
+		ctx = c.getContext("2d");
+		if (ctx) {
+			ctx.lineWidth = 3;
+			ctx.lineCap = "round";
+			ctx.lineJoin = "round";
+		}
+		canvasInitialized = true;
+		saveDrawState();
+	} else {
+		ctx = c.getContext("2d");
 	}
-	saveDrawState();
+	if (ctx) ctx.strokeStyle = drawColor.value;
 }
 
 function saveDrawState() {
@@ -148,9 +155,16 @@ function clearDraw() {
 }
 
 function onKeyDown(e: KeyboardEvent) {
-	if (drawMode.value && (e.ctrlKey || e.metaKey) && e.key === "z") {
+	if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+		if (drawMode.value) {
+			e.preventDefault();
+			undoDraw();
+		}
+		return;
+	}
+	if (e.key === "d" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
 		e.preventDefault();
-		undoDraw();
+		toggleDraw();
 	}
 }
 
@@ -174,6 +188,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeyDown));
 	width: 100vw;
 	height: 100vh;
 	z-index: 1000;
+	pointer-events: none;
+}
+.draw-overlay--interactive {
+	pointer-events: auto;
 	cursor: crosshair;
 }
 .draw-canvas {

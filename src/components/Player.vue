@@ -33,9 +33,12 @@
 									<span
 										v-if="isDead"
 										class="death-badge"
-										title="已死亡"
-										>💀</span
-									>
+										style="font-size: 18px"
+										title="已死亡">
+										<span class="icon">
+											<IconSkull />
+										</span>
+									</span>
 									<span :style="`color: ${calColor}`">{{
 										calRoleName
 									}}</span>
@@ -49,10 +52,10 @@
 										}" />
 									<span
 										v-if="canShowSkill"
-										class="skill-badge"
+										class="skill-badge icon"
+										style="font-size: 16px"
 										title="可发动技能"
-										>⚡</span
-									>
+										><IconLightningBolt /></span>
 								</span>
 							</template>
 							<template #header-extra>
@@ -169,6 +172,7 @@
 <script setup lang="ts">
 import { Character, RoleMap, Faction } from "@/data/model";
 import { computed, ref, onMounted, onUnmounted } from "vue";
+import { IconSkull, IconLightningBolt } from "@iconify-prerendered/vue-mdi";
 import {
 	NCard,
 	NPopover,

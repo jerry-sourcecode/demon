@@ -9,9 +9,9 @@
 				type="success"
 				size="large"
 				@click="onContinue"
-				style="width: 100%; margin-bottom: 8px"
-				>▶ 继续游戏</n-button
-			>
+				style="width: 100%; margin-bottom: 8px">
+				继续游戏
+			</n-button>
 			<n-button
 				type="primary"
 				size="large"
@@ -51,7 +51,13 @@
 			:mask-closable="false">
 			<n-tabs type="segment" animated v-model:value="configTab">
 				<!-- Tab 1: 游戏配置 -->
-				<n-tab-pane name="game" tab="⚔ 游戏">
+				<n-tab-pane name="game">
+					<template #tab>
+						<span class="icon">
+							<IconSwordCross />
+						</span>
+						游戏
+					</template>
 					<div class="config-body">
 						<div class="count-grid">
 							<div class="count-item">
@@ -113,7 +119,13 @@
 				</n-tab-pane>
 
 				<!-- Tab 2: AI 配置 -->
-				<n-tab-pane name="ai" tab="🤖 AI">
+				<n-tab-pane name="ai">
+					<template #tab>
+						<span class="icon">
+							<IconRobot />
+						</span>
+						AI
+					</template>
 					<div class="ai-form">
 						<n-form-item label="启用 AI">
 							<n-switch v-model:value="aiEnabled" />
@@ -223,6 +235,7 @@
 </template>
 <script setup lang="ts">
 import { ref, nextTick, computed, watch } from "vue";
+import { IconSwordCross, IconRobot } from "@iconify-prerendered/vue-mdi";
 import {
 	NButton,
 	NModal,

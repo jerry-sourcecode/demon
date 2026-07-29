@@ -201,8 +201,8 @@ const entries = computed<InfoEntry[]>(() => {
 					timeStr: t,
 					tag: "结局",
 					text: meta.win
-						? "🎉 胜利！"
-						: `💀 失败${meta.reason ? `（${meta.reason}）` : ""}`,
+						? "胜利！"
+						: `失败${meta.reason ? `（${meta.reason}）` : ""}`,
 				});
 				break;
 		}

@@ -11,6 +11,7 @@
     "type-check": "vue-tsc --build"
   },
   "dependencies": {
+    "@iconify-prerendered/vue-mdi": "^0.28.1737398331",
     "markdown-it": "^14.3.0",
     "openai": "^6.49.0",
     "pinia": "^3.0.4",

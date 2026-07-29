@@ -52,16 +52,18 @@
 
 			<!-- 左上角 -->
 			<div class="ring-corner ring-corner--tl">
-				<NStatistic label="声望">
-					<NNumberAnimation
-						:from="prevReputation"
-						:to="dataStore.reputation" />
-				</NStatistic>
-				<NStatistic label="行动力">
-					<NNumberAnimation
-						:from="prevAP"
-						:to="dataStore.actionPoints" />
-				</NStatistic>
+				<div style="display: flex; gap: 30px">
+					<NStatistic label="声望">
+						<NNumberAnimation
+							:from="prevReputation"
+							:to="dataStore.reputation" />
+					</NStatistic>
+					<NStatistic label="行动力">
+						<NNumberAnimation
+							:from="prevAP"
+							:to="dataStore.actionPoints" />
+					</NStatistic>
+				</div>
 			</div>
 
 			<!-- 右上角 -->
@@ -134,6 +136,14 @@
 				</n-button>
 			</template>
 		</n-modal>
+		<!-- 身份菜单按钮（移动端用，代替 Tab 键） -->
+		<n-button
+			class="sheet-btn"
+			size="small"
+			circle
+			@click="showRoleSheet = !showRoleSheet">
+			<IconClipboardList />
+		</n-button>
 		<!-- 新手引导 -->
 		<n-button
 			class="tutorial-btn"
@@ -150,6 +160,7 @@
 </template>
 
 <script setup lang="ts">
+import { IconClipboardList } from "@iconify-prerendered/vue-mdi";
 import {
 	ref,
 	watch,
@@ -628,6 +639,13 @@ onUnmounted(() => {
 	right: 20px;
 	z-index: 1000;
 	font-weight: bold;
+	font-size: 16px;
+}
+.sheet-btn {
+	position: fixed;
+	bottom: 20px;
+	right: 64px;
+	z-index: 1000;
 	font-size: 16px;
 }
 </style>

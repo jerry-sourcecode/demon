@@ -12,7 +12,15 @@
 		">
 		<n-tabs type="line" animated>
 			<!-- Tab 1: 概览 -->
-			<n-tab-pane name="overview" tab="📊 概览">
+			<n-tab-pane
+				name="overview"
+				style="max-height: 80vh; overflow-y: auto">
+				<template #tab>
+					<span class="icon">
+						<IconChartBar />
+					</span>
+					概览
+				</template>
 				<div class="overview-container">
 					<!-- 胜负结果 -->
 					<div class="result-section">
@@ -151,7 +159,13 @@
 			</n-tab-pane>
 
 			<!-- Tab 2: 角色揭秘 -->
-			<n-tab-pane name="reveal" tab="🔍 角色揭秘">
+			<n-tab-pane name="reveal">
+				<template #tab>
+					<span class="icon">
+						<IconMagnify />
+					</span>
+					角色揭秘
+				</template>
 				<div class="reveal-grid">
 					<n-card
 						v-for="c in charList"
@@ -175,7 +189,10 @@
 						</template>
 						<div :class="{ 'dead-card': c.dead }">
 							<p v-if="c.dead" class="dead-tag">
-								☠ {{ c.deathCause }}
+								<span class="icon" style="font-size: 14px">
+									<IconSkull />
+								</span>
+								{{ c.deathCause }}
 							</p>
 							<div v-if="c.disguiseRole" class="disguise-tag">
 								<AbilityMd
@@ -187,7 +204,13 @@
 			</n-tab-pane>
 
 			<!-- Tab 3: 复盘时间线 -->
-			<n-tab-pane name="replay" tab="📜 复盘">
+			<n-tab-pane name="replay">
+				<template #tab>
+					<span class="icon">
+						<IconScrollText />
+					</span>
+					复盘
+				</template>
 				<n-tabs
 					type="segment"
 					animated
@@ -220,7 +243,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, h } from "vue";
+import {
+	IconChartBar,
+	IconMagnify,
+	IconScrollText,
+	IconSkull,
+} from "@iconify-prerendered/vue-mdi";
 import {
 	NModal,
 	NTabs,
@@ -441,16 +470,16 @@ const dayGroups = computed<DayGroup[]>(() => {
 const replayDayTab = ref<string>();
 
 const EVENT_LABELS: Record<string, string> = {
-	gameStart: "🎬 游戏开始",
-	phaseChange: "⏰ 阶段切换",
-	recall: "🔍 回忆",
-	execute: "⚔️ 处决",
-	death: "☠ 死亡",
-	disguiseChange: "🎭 伪装变更",
-	reputationChange: "📊 声望变化",
-	skillResolution: "🔄 技能结算",
-	gameEnd: "🏁 游戏结束",
-	confusedChange: "😵 混乱状态",
+	gameStart: "游戏开始",
+	phaseChange: "阶段切换",
+	recall: "回忆",
+	execute: "处决",
+	death: "死亡",
+	disguiseChange: "伪装变更",
+	reputationChange: "声望变化",
+	skillResolution: "技能结算",
+	gameEnd: "游戏结束",
+	confusedChange: "混乱状态",
 };
 
 function formatEventTitle(event: GameEvent): string {

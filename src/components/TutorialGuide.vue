@@ -20,7 +20,8 @@
 			<div class="tutorial-text" v-html="renderedText" />
 
 			<div v-if="currentStep.action" class="tutorial-action-hint">
-				💡 {{ currentStep.action }}
+				<span class="icon"><IconLightbulbOn /></span>
+				{{ currentStep.action }}
 			</div>
 
 			<div class="tutorial-actions">
@@ -44,6 +45,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from "vue";
 import { NButton } from "naive-ui";
+import { IconLightbulbOn } from "@iconify-prerendered/vue-mdi";
 import type { TutorialStep } from "@/data/tutorial";
 
 const props = defineProps<{
