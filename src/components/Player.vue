@@ -187,6 +187,7 @@ import {
 	logExecute,
 	logSkillResolution,
 	logSkillActivate,
+	logReputationChange,
 } from "@/data/gameLog";
 
 const dataStore = useDataStore();
@@ -344,7 +345,7 @@ const canAffordExecute = computed(() =>
 );
 
 function onRecall() {
-	if (!dataStore.spendActionPoints(ACTION_COST.recall)) return;
+	if (!dataStore.canSpendActionPoints(ACTION_COST.recall)) return;
 	showActions.value = false;
 	const c = props.data;
 	const infoBefore = [...c.info];
@@ -358,13 +359,29 @@ function onRecall() {
 	emit("action-done");
 }
 
+/** 技能调动成功后的善后处理 */
+function afterSkillActivate(c: Character) {
+	logSkillActivate(c.id);
+	// 每次成功调动技能消耗 1 点声望
+	dataStore.reputation--;
+	logReputationChange(-1, `#${c.id} 发动技能`);
+}
+
 async function onSkill() {
 	showActions.value = false;
+	// 先执行技能逻辑，返回 false 表示取消/失败
+	const result = await RoleMap[props.data.displayRole]?.onActiveSkill?.(
+		props.data,
+	);
+	if (result === false) {
+		// 取消也要 emit action-done 让游戏循环继续
+		emit("action-done");
+		return;
+	}
 	// 白天消耗行动点，黎明/黄昏不消耗
 	const isDay = Time.getPhase(dataStore.time) === Time.Phase.Day;
-	if (isDay && !dataStore.spendActionPoints(ACTION_COST.skill)) return;
-	logSkillActivate(props.data.id);
-	await RoleMap[props.data.displayRole]?.onActiveSkill?.(props.data);
+	if (isDay && !dataStore.canSpendActionPoints(ACTION_COST.skill)) return;
+	afterSkillActivate(props.data);
 	emit("action-done");
 }
 
@@ -376,7 +393,7 @@ function onExecute() {
 		positiveText: "确定",
 		negativeText: "取消",
 		onPositiveClick: () => {
-			if (!dataStore.spendActionPoints(ACTION_COST.execute)) return;
+			if (!dataStore.canSpendActionPoints(ACTION_COST.execute)) return;
 			logExecute(props.data.id);
 			props.data.addTag(TagType.executed);
 			emit("action-done");

@@ -137,7 +137,7 @@ export const useDataStore = defineStore('data', () => {
         return actionPoints.value >= cost;
     }
 
-    function spendActionPoints(cost: number): boolean {
+    function canSpendActionPoints(cost: number): boolean {
         if (actionPoints.value < cost) return false;
         actionPoints.value -= cost;
         return true;
@@ -214,5 +214,5 @@ export const useDataStore = defineStore('data', () => {
         removeSave();
     }
 
-    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
+    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, canSpendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
 })

@@ -357,13 +357,17 @@ emitter.on("game-end", (win) => {
 		number,
 		import("@/data/model").RoleType
 	>;
-	gameOverRecord.value = useMatchStore().buildMatchRecord(
+	const matchStore = useMatchStore();
+	const record = matchStore.buildMatchRecord(
 		dataStore.currentMatchConfig ?? DEFAULT_MATCH_CONFIG,
 		win,
 		dataStore.gameLog,
 		initRoles,
 		dataStore.chars,
 	);
+	gameOverRecord.value = record;
+	// 保存到对局记录
+	matchStore.addMatchRecord(record);
 	setTimeout(() => {
 		showGameOverModal.value = true;
 	}, 500);
@@ -397,17 +401,30 @@ emitter.on("wait-for-action", () => {
 });
 
 function finishAction() {
-	if (!waitRes.value) return;
-	waitRes.value();
+	if (!waitRes.value) {
+		return;
+	}
+	const resolve = waitRes.value;
 	waitRes.value = null;
 	midDoneBtn.value = false;
 	midDisplay.value = false;
+	resolve();
 }
 
 function midDoneBtnClick() {
 	dataStore.actionPoints = 0;
 	finishAction();
 }
+
+/** 兜底：行动点归 0 时自动推进（防止因 Promise 异常丢失导致卡死） */
+watch(
+	() => dataStore.actionPoints,
+	(val) => {
+		if (val <= 0 && !dataStore.gameOver && waitRes.value) {
+			finishAction();
+		}
+	},
+);
 
 // ── 玩家选取 ──
 
@@ -463,7 +480,7 @@ function confirmSelection() {
 }
 
 function cancelSelection() {
-	dataStore.spendActionPoints(-ACTION_COST.skill);
+	dataStore.canSpendActionPoints(-ACTION_COST.skill);
 	selecting.value = false;
 	selectResolve?.(null);
 	selectEnd();
@@ -546,6 +563,7 @@ onUnmounted(() => {
 	align-items: center;
 	justify-content: center;
 	height: 100vh;
+	width: 100vw;
 }
 
 .ring-container {

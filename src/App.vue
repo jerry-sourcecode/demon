@@ -4,7 +4,7 @@
 			<GameStart v-if="!started" @start="started = true" />
 			<template v-else>
 				<div class="main">
-					<n-split :default-size="0.15">
+					<n-split :default-size="0.1">
 						<template #1><Paper /></template>
 						<template #2>
 							<n-split
