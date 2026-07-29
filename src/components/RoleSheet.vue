@@ -63,30 +63,33 @@ const knownOutsiders = computed(() =>
 );
 
 const villagerSlotCount = computed(() =>
-	Math.max(dataStore.villagerMax, knownVillagers.value.length),
+	Math.max(dataStore.displayVillagerRange.max, knownVillagers.value.length),
 );
 
 const outsiderSlotCount = computed(() =>
-	Math.max(dataStore.outsiderMax, knownOutsiders.value.length),
+	Math.max(dataStore.displayOutsiderRange.max, knownOutsiders.value.length),
 );
 
 const villagerLabel = computed(() => {
 	const range =
-		dataStore.villagerMin === dataStore.villagerMax
-			? `${dataStore.villagerMin}`
-			: `${dataStore.villagerMin}~${dataStore.villagerMax}`;
+		dataStore.displayVillagerRange.min ===
+		dataStore.displayVillagerRange.max
+			? `${dataStore.displayVillagerRange.min}`
+			: `${dataStore.displayVillagerRange.min}~${dataStore.displayVillagerRange.max}`;
 	const known = knownVillagers.value.length;
-	if (known > dataStore.villagerMax) return `镇民（${range}，已知 ${known}）`;
+	if (known > dataStore.displayVillagerRange.max)
+		return `镇民（${range}，已知 ${known}）`;
 	return `镇民（${range}）`;
 });
 
 const outsiderLabel = computed(() => {
 	const range =
-		dataStore.outsiderMin === dataStore.outsiderMax
-			? `${dataStore.outsiderMin}`
-			: `${dataStore.outsiderMin}~${dataStore.outsiderMax}`;
+		dataStore.displayOutsiderRange.min ===
+		dataStore.displayOutsiderRange.max
+			? `${dataStore.displayOutsiderRange.min}`
+			: `${dataStore.displayOutsiderRange.min}~${dataStore.displayOutsiderRange.max}`;
 	const known = knownOutsiders.value.length;
-	if (known > dataStore.outsiderMax)
+	if (known > dataStore.displayOutsiderRange.max)
 		return `外来者（${range}，已知 ${known}）`;
 	return `外来者（${range}）`;
 });

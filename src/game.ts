@@ -71,8 +71,7 @@ export async function start(matchConfig: MatchConfig) {
     let player: RoleType[] = [];
     player.push(...pickRoles(Faction.villager, vc));
     player.push(...pickRoles(Faction.outsider, oc));
-    // player.push(...pickRoles(Faction.minion, mc));
-    player.push('Baron', 'GodFather');
+    player.push(...pickRoles(Faction.minion, mc));
     player.push(...pickRoles(Faction.demon, dc));
     player = shuffle(player);
 
@@ -116,16 +115,20 @@ export async function start(matchConfig: MatchConfig) {
         .filter(c => c.isTrulyEvil())
         .map(c => c.role);
 
-    // 混淆恶魔
-    const absentDemon = allDemonKeys.filter(k => !actualEvil.includes(k));
-    if (absentDemon.length > 0) {
-        actualEvil.push(randpick(absentDemon, 1).items[0]!);
+    // 混淆恶魔（有恶魔时才加一个不在场恶魔）
+    if (dc > 0) {
+        const absentDemon = allDemonKeys.filter(k => !actualEvil.includes(k));
+        if (absentDemon.length > 0) {
+            actualEvil.push(randpick(absentDemon, 1).items[0]!);
+        }
     }
 
-    // 混淆爪牙
-    const absentMinion = allMinionKeys.filter(k => !actualEvil.includes(k));
-    if (absentMinion.length > 0) {
-        actualEvil.push(randpick(absentMinion, 1).items[0]!);
+    // 混淆爪牙（有爪牙时才加一个不在场爪牙）
+    if (mc > 0) {
+        const absentMinion = allMinionKeys.filter(k => !actualEvil.includes(k));
+        if (absentMinion.length > 0) {
+            actualEvil.push(randpick(absentMinion, 1).items[0]!);
+        }
     }
 
     actualEvil = shuffle(actualEvil);

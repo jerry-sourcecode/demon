@@ -1,6 +1,6 @@
 ﻿<template>
 	<div class="start-page">
-		<h1 class="title">血染钟楼</h1>
+		<h1 class="title">夜幕审判</h1>
 		<p class="subtitle">单人推理游戏</p>
 
 		<div class="actions">
@@ -207,6 +207,18 @@
 				</n-tab-pane>
 			</n-tabs>
 		</n-modal>
+		<!-- 新手引导 -->
+		<n-button
+			class="tutorial-btn"
+			size="small"
+			circle
+			@click="showTutorial = true">
+			?
+		</n-button>
+		<TutorialGuide
+			v-if="showTutorial"
+			:steps="menuSteps"
+			@close="onTutorialClose" />
 	</div>
 </template>
 <script setup lang="ts">
@@ -233,6 +245,8 @@ import type { MatchConfig, MatchRecord } from "@/data/match";
 import { DEFAULT_MATCH_CONFIG } from "@/data/match";
 import MatchHistoryModal from "./MatchHistoryModal.vue";
 import GameOverModal from "./GameOverModal.vue";
+import TutorialGuide from "./TutorialGuide.vue";
+import { MENU_STEPS } from "@/data/tutorial";
 
 const emit = defineEmits<{ start: [] }>();
 const showImport = ref(false);
@@ -243,6 +257,29 @@ const showImportResult = ref(false);
 const importedRecord = ref<MatchRecord | null>(null);
 const pasteText = ref("");
 const importError = ref("");
+
+const showTutorial = ref(false);
+const menuSteps = MENU_STEPS;
+
+const TUTORIAL_DONE_KEY = "demon-tutorial-done";
+
+function onTutorialClose() {
+	showTutorial.value = false;
+	try {
+		localStorage.setItem(TUTORIAL_DONE_KEY, "1");
+	} catch {
+		/* ignore */
+	}
+}
+
+// 首次使用时自动弹出新手引导
+try {
+	if (!localStorage.getItem(TUTORIAL_DONE_KEY)) {
+		showTutorial.value = true;
+	}
+} catch {
+	/* ignore */
+}
 
 const dataStore = useDataStore();
 const matchStore = useMatchStore();
@@ -438,5 +475,13 @@ function onPasteImport() {
 	display: flex;
 	justify-content: flex-end;
 	gap: 10px;
+}
+.tutorial-btn {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	z-index: 100;
+	font-weight: bold;
+	font-size: 16px;
 }
 </style>

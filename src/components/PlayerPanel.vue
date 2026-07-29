@@ -134,6 +134,18 @@
 				</n-button>
 			</template>
 		</n-modal>
+		<!-- 新手引导 -->
+		<n-button
+			class="tutorial-btn"
+			size="small"
+			circle
+			@click="showTutorial = true">
+			?
+		</n-button>
+		<TutorialGuide
+			v-if="showTutorial"
+			:steps="gameSteps"
+			@close="onTutorialClose" />
 	</div>
 </template>
 
@@ -168,6 +180,8 @@ import RoleMenu from "./RoleMenu.vue";
 import { start } from "@/game.ts";
 import { useMatchStore } from "@/store/matchStore";
 import { DEFAULT_MATCH_CONFIG, type MatchRecord } from "@/data/match";
+import TutorialGuide from "./TutorialGuide.vue";
+import { GAME_STEPS } from "@/data/tutorial";
 
 const panelEmit = defineEmits<{
 	goHome: [];
@@ -191,14 +205,10 @@ watch(
 
 const factionCounts = computed(() => {
 	const { minion, demon } = dataStore.initCounts;
-	const vCount =
-		dataStore.villagerMin === dataStore.villagerMax
-			? `${dataStore.villagerMin}`
-			: `${dataStore.villagerMin}~${dataStore.villagerMax}`;
-	const oCount =
-		dataStore.outsiderMin === dataStore.outsiderMax
-			? `${dataStore.outsiderMin}`
-			: `${dataStore.outsiderMin}~${dataStore.outsiderMax}`;
+	const vr = dataStore.displayVillagerRange;
+	const vCount = vr.min === vr.max ? `${vr.min}` : `${vr.min}~${vr.max}`;
+	const or = dataStore.displayOutsiderRange;
+	const oCount = or.min === or.max ? `${or.min}` : `${or.min}~${or.max}`;
 	return [
 		{ key: Faction.villager, count: vCount },
 		{ key: Faction.outsider, count: oCount },
@@ -280,6 +290,27 @@ onMounted(() => {
 // ── 身份菜单 ──
 
 const showRoleSheet = ref(false);
+const showTutorial = ref(false);
+const gameSteps = GAME_STEPS;
+
+const TUTORIAL_GAME_KEY = "demon-tutorial-game";
+// 首次进入游戏时自动弹出游戏内引导
+try {
+	if (!localStorage.getItem(TUTORIAL_GAME_KEY)) {
+		showTutorial.value = true;
+	}
+} catch {
+	/* ignore */
+}
+
+function onTutorialClose() {
+	showTutorial.value = false;
+	try {
+		localStorage.setItem(TUTORIAL_GAME_KEY, "1");
+	} catch {
+		/* ignore */
+	}
+}
 
 function onKeyDown(e: KeyboardEvent) {
 	if (e.key === "Tab" && !e.repeat) {
@@ -573,5 +604,13 @@ onUnmounted(() => {
 }
 .card-slot:hover {
 	z-index: 100;
+}
+.tutorial-btn {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	z-index: 1000;
+	font-weight: bold;
+	font-size: 16px;
 }
 </style>

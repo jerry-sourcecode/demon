@@ -51,6 +51,18 @@ export const useDataStore = defineStore('data', () => {
     const outsiderMin = ref(1);
     const outsiderMax = ref(1);
 
+    /** 确保范围总是小~大 */
+    const displayVillagerRange = computed(() =>
+        villagerMin.value <= villagerMax.value
+            ? { min: villagerMin.value, max: villagerMax.value }
+            : { min: villagerMax.value, max: villagerMin.value }
+    );
+    const displayOutsiderRange = computed(() =>
+        outsiderMin.value <= outsiderMax.value
+            ? { min: outsiderMin.value, max: outsiderMax.value }
+            : { min: outsiderMax.value, max: outsiderMin.value }
+    );
+
     /** AI 配置 */
     const AI_STORAGE_KEY = 'demon-ai-config';
     const aiConfigured = ref(false);
@@ -202,5 +214,5 @@ export const useDataStore = defineStore('data', () => {
         removeSave();
     }
 
-    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
+    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, spendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
 })
