@@ -26,7 +26,7 @@ function buildRoleKeywords(): Record<string, KeywordEntry> {
     for (const [key, role] of Object.entries(RoleMap)) {
         entries[key] = {
             display: role.display,
-            desc: dedent(role.ability),
+            desc: `::${role.faction}::。\n\n${dedent(role.ability)}`,
             color: FACTION_COLORS[role.faction] || "#4fc3f7",
         };
     }
@@ -119,7 +119,13 @@ export const KEYWORD_DICT: Record<string, KeywordEntry> = {
         display: "回忆",
         desc: "失忆者模糊地想起自己曾是怎样的一个人。::kind::通常会记起真实身份，::evil::则会记起虚假的身份。",
         color: "#f7c94f",
+    },
+    nfNight: {
+        display: "每个夜晚*",
+        desc: "指除首个夜晚以外的每个夜晚。",
+        color: "#524ff7",
     }
+
 };
 
 /** markdown-it 实例（复用，避免重复创建） */

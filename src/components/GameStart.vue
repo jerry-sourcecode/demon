@@ -265,20 +265,11 @@ const TUTORIAL_DONE_KEY = "demon-tutorial-done";
 
 function onTutorialClose() {
 	showTutorial.value = false;
-	try {
-		localStorage.setItem(TUTORIAL_DONE_KEY, "1");
-	} catch {
-		/* ignore */
-	}
+	localStorage.setItem(TUTORIAL_DONE_KEY, "1");
 }
 
-// 首次使用时自动弹出新手引导
-try {
-	if (!localStorage.getItem(TUTORIAL_DONE_KEY)) {
-		showTutorial.value = true;
-	}
-} catch {
-	/* ignore */
+if (!localStorage.getItem(TUTORIAL_DONE_KEY)) {
+	showTutorial.value = true;
 }
 
 const dataStore = useDataStore();

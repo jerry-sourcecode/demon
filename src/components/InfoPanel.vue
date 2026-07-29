@@ -26,7 +26,6 @@
 import { computed, ref, watch } from "vue";
 import { useDataStore } from "@/store/value";
 import { Time } from "@/utils/time";
-import { RoleMap } from "@/data/model";
 import AbilityMd from "./AbilityMd.vue";
 import type { GameEvent } from "@/data/gameLog";
 
@@ -42,13 +41,7 @@ const dataStore = useDataStore();
 const scrollRef = ref<HTMLElement | null>(null);
 
 function getCharLabel(id: number): string {
-	const c = dataStore.chars.get(id);
-	if (!c) return `#${id}`;
-	const role =
-		c.displayRole && c.displayRole !== "unknown"
-			? (RoleMap[c.displayRole]?.display ?? c.displayRole)
-			: "???";
-	return `#${c.id}（${role}）`;
+	return `#${id}`;
 }
 
 function formatTime(t: Time.TimeNumber): string {
@@ -66,18 +59,31 @@ const entries = computed<InfoEntry[]>(() => {
 		const subjectLabel =
 			event.subject > 0 ? getCharLabel(event.subject) : "系统";
 
-		// ① 夜晚死亡整合：在"进入 黎明"后收集紧接着的死亡事件
+		// ① 夜晚死亡整合：在"进入 黎明"后收集本次时段的所有死亡
+		// （死亡之间可能穿插 reputationChange/skillResolution 等伴随事件）
 		if (event.type === "phaseChange" && meta.phase === "黎明") {
 			const deaths: string[] = [];
 			let j = i + 1;
-			while (j < log.length && log[j]!.type === "death") {
-				const de = log[j]!;
-				deaths.push(
-					de.subject > 0
-						? getCharLabel(de.subject)
-						: `#${de.subject}`,
-				);
-				j++;
+			while (j < log.length) {
+				const next = log[j]!;
+				if (next.type === "death") {
+					deaths.push(
+						next.subject > 0
+							? getCharLabel(next.subject)
+							: `#${next.subject}`,
+					);
+					j++;
+					continue;
+				}
+				// 跳过死亡伴随事件（声望变动、技能结算）
+				if (
+					next.type === "reputationChange" ||
+					next.type === "skillResolution"
+				) {
+					j++;
+					continue;
+				}
+				break; // 遇到其他事件终止收集
 			}
 			if (deaths.length > 0) {
 				result.push({
@@ -85,7 +91,7 @@ const entries = computed<InfoEntry[]>(() => {
 					type: "death",
 					timeStr: t,
 					tag: "死亡",
-					text: `昨天晚上，${deaths.join("、")}死在了家中`,
+					text: `昨天晚上，${deaths.join("、")} 被发现死在了家中`,
 				});
 				i = j - 1;
 				continue;

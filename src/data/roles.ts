@@ -826,7 +826,7 @@ const roles = {
     Monk: {
         display: '僧侣',
         faction: Faction.villager,
-        ability: '每个夜晚*，你要选择除你以外的一名玩家：当晚他不会死亡。',
+        ability: '::nfNight::，你要选择除你以外的一名玩家：当晚他不会死亡。',
         abnormal: {
             overall: "你仍需要选择玩家，但技能不会生效。",
         },
@@ -860,7 +860,7 @@ const roles = {
     Innkeeper: {
         display: '旅店老板',
         faction: Faction.villager,
-        ability: '每个夜晚*，你要选择两名玩家：他们当晚不会死亡，但其中一人会醉酒到下个::dusk::。',
+        ability: '::nfNight::，你要选择两名玩家：他们当晚不会死亡，但其中一人会醉酒到下个::dusk::。',
         abnormal: {
             overall: "你仍需要选择玩家，但技能不会生效。"
         }, nightActionPriority() {
@@ -1326,7 +1326,7 @@ const roles = {
     Po: {
         display: '珀',
         faction: Faction.demon,
-        ability: '每个夜晚*，若没有充能，进行一次充能，否则，消耗充能，随机三名::kind::（优先::villager::）死亡。',
+        ability: '::nfNight::，若没有充能，进行一次充能，否则，消耗充能，随机三名::kind::（优先::villager::）死亡。',
         abnormal: {
             overall: "充能或释放不会生效。",
         },
@@ -1370,7 +1370,7 @@ const roles = {
     Vigormortis: {
         display: '亡骨魔',
         faction: Faction.demon,
-        ability: '每个夜晚*，随机一名::kind::（优先::villager::）：他死亡。第一个死亡的爪牙保留他的能力，且与他邻近的两名镇民之一::poisoned::，当晚你无法行动。[-1::outsider::]',
+        ability: '::nfNight::，随机一名::kind::（优先::villager::）：他死亡。第一个死亡的爪牙保留他的能力，且与他邻近的两名镇民之一::poisoned::，当晚你无法行动。[-1::outsider::]',
         abnormal: {
             overall: "不会有玩家死亡，爪牙能力也不会保留。",
         },

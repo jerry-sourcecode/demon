@@ -274,7 +274,20 @@ const dotColors: Record<string, string> = {
 function toggleDot(key: string) {
 	const c = props.data;
 	const idx = c.customTags.indexOf(key);
-	idx >= 0 ? c.customTags.splice(idx, 1) : c.customTags.push(key);
+	if (idx >= 0) {
+		// 已存在 → 移除
+		c.customTags.splice(idx, 1);
+		return;
+	}
+	// 互斥分组：1~4 一组，5~7 一组
+	const group1 = ["villager", "outsider", "minion", "demon"];
+	const group2 = ["suspect", "trust", "pending"];
+	if (group1.includes(key)) {
+		c.customTags = c.customTags.filter((k) => !group1.includes(k));
+	} else if (group2.includes(key)) {
+		c.customTags = c.customTags.filter((k) => !group2.includes(k));
+	}
+	c.customTags.push(key);
 }
 
 function onKeyDown(e: KeyboardEvent) {
