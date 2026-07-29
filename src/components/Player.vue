@@ -22,6 +22,9 @@
 							:style="cardStyle"
 							@contextmenu.prevent="showDetail"
 							@click="onCardClick"
+							@touchstart="onTouchStart"
+							@touchend="onTouchEnd"
+							@touchmove="onTouchMove"
 							class="outer"
 							hoverable
 							size="small">
@@ -193,6 +196,7 @@ import {
 const dataStore = useDataStore();
 const dialog = useDialog();
 const showDetailModal = ref(false);
+const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
 const props = defineProps<{
 	data: Character;
@@ -399,6 +403,24 @@ function onExecute() {
 			emit("action-done");
 		},
 	});
+}
+
+// ── 长按（移动端显示详情，等同于右键）──
+function onTouchStart() {
+	if (props.selecting) return;
+	longPressTimer.value = setTimeout(() => {
+		longPressTimer.value = null;
+		showDetailModal.value = true;
+	}, 500);
+}
+function onTouchEnd() {
+	if (longPressTimer.value) {
+		clearTimeout(longPressTimer.value);
+		longPressTimer.value = null;
+	}
+}
+function onTouchMove() {
+	onTouchEnd();
 }
 
 function showDetail() {
