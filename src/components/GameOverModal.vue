@@ -4,7 +4,7 @@
 		preset="card"
 		:mask-closable="false"
 		:closable="false"
-		style="max-width: 900px; width: 90vw; max-height: 85vh"
+		style="max-width: 900px; width: 90vw"
 		:title="
 			showActions
 				? '游戏结束'
@@ -14,7 +14,7 @@
 			<!-- Tab 1: 概览 -->
 			<n-tab-pane
 				name="overview"
-				style="max-height: 80vh; overflow-y: auto">
+				style="max-height: 70vh; overflow-y: auto">
 				<template #tab>
 					<span class="icon">
 						<IconChartBar />
