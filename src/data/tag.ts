@@ -1,4 +1,4 @@
-import { runFn } from "@/utils/utils";
+import { randint, runFn } from "@/utils/utils";
 import { Time } from "../utils/time";
 import { RoleMap, type Character, type DeadReasonType } from "./model";
 import { useDataStore } from "@/store/value";
@@ -15,6 +15,8 @@ export const TagType = {
     disguise: "disguise",
     /** 处决免疫（魔鬼代言人） */
     executionImmune: "executionImmune",
+    /** 可能处决免疫（和平主义者） */
+    pacifist: "pacifist",
     farmer: "farmer",
     recall: "recall",
     grandson: "grandson",
@@ -120,7 +122,15 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     },
     [TagType.executed]: {
         beforeAdd(c) {
+            const dataStore = useDataStore();
             if (c.hasTag(TagType.dead)) return false;
+            for (const tg of c.getTag(TagType.pacifist)) {
+                const c = dataStore.chars.get(tg.source!)!;
+                if (c.isAwake('Pacifist') && !c.hasTag('dead') && randint(1, 10) <= 6) {
+                    logSkillResolution(c.id, `被处决成功但没有死亡（::Pacifist::技能生效）。`)
+                    return false;
+                }
+            }
             const now = useDataStore().time;
             const currentDay = Time.getDay(now);
             if (c.getTag(TagType.executionImmune).some(t => t.meta?.day === currentDay)) {

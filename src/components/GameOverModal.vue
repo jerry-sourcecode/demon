@@ -48,7 +48,7 @@
 							评级：{{ rating }}
 						</n-tag>
 						<p class="rating-score">
-							综合得分：{{ totalScore }} / 100
+							综合得分：{{ totalScore }} / 120
 						</p>
 					</div>
 
@@ -110,7 +110,8 @@
 							type="warning"
 							round
 							size="small">
-							🏅 {{ ach }}
+							<span class="icon"><IconTrophy /></span>
+							{{ ach }}
 						</n-tag>
 					</div>
 
@@ -158,7 +159,127 @@
 				</div>
 			</n-tab-pane>
 
-			<!-- Tab 2: 角色揭秘 -->
+			<!-- Tab 2: 得分明细 -->
+			<n-tab-pane
+				name="score-detail"
+				style="max-height: 70vh; overflow-y: auto">
+				<template #tab>
+					<span class="icon">
+						<IconTrophy />
+					</span>
+					得分明细
+				</template>
+				<div style="padding: 8px 0">
+					<n-card
+						v-for="item in scoreBreakdown"
+						:key="item.label"
+						embedded
+						style="margin-bottom: 8px">
+						<div
+							style="
+								display: flex;
+								align-items: center;
+								gap: 12px;
+							">
+							<span
+								style="
+									width: 90px;
+									flex-shrink: 0;
+									font-size: 13px;
+								">
+								{{ item.label }}
+							</span>
+							<div style="flex: 1; min-width: 0">
+								<n-progress
+									:percentage="Math.round(item.pct)"
+									:status="tierToStatus(item.tier)"
+									:height="15"
+									:indicator-placement="'inside'" />
+								<div
+									style="
+										margin-top: 4px;
+										font-size: 12px;
+										color: #999;
+									">
+									{{ item.detail }}
+								</div>
+							</div>
+							<n-statistic
+								:value="Math.round(item.score)"
+								style="width: 70px; flex-shrink: 0"
+								tabular-nums>
+								<template #suffix>
+									<span style="font-size: 12px"
+										>/ {{ item.max }}</span
+									>
+								</template>
+							</n-statistic>
+						</div>
+					</n-card>
+
+					<NDivider
+						style="margin: 4px 0"
+						v-if="parseAchievements.length !== 0" />
+
+					<n-card
+						v-for="ach in parseAchievements"
+						:key="ach.label"
+						size="small"
+						:embedded="true"
+						style="margin-bottom: 4px">
+						<div
+							style="
+								display: flex;
+								align-items: center;
+								gap: 12px;
+							">
+							<span
+								style="
+									width: 90px;
+									flex-shrink: 0;
+									font-size: 13px;
+								">
+								{{ ach.label }}
+							</span>
+							<n-tag
+								:type="ach.negative ? 'error' : 'success'"
+								size="small"
+								style="flex-shrink: 0">
+								{{ ach.negative ? "" : "+" }}{{ ach.score }}
+							</n-tag>
+							<span style="font-size: 12px; color: #999">
+								{{ ach.detail }}
+							</span>
+						</div>
+					</n-card>
+
+					<NDivider style="margin: 4px 0" />
+
+					<n-card
+						size="small"
+						style="
+							margin-top: 8px;
+							background: #fafafa;
+							text-align: center;
+						">
+						<n-statistic :value="totalScoreDisplay">
+							<template #label>
+								<span style="font-weight: bold"> 总分 </span>
+							</template>
+						</n-statistic>
+						<p
+							style="
+								margin-top: 4px;
+								font-size: 13px;
+								color: #888;
+							">
+							{{ ratingDisplay }}
+						</p>
+					</n-card>
+				</div>
+			</n-tab-pane>
+
+			<!-- Tab 3: 角色揭秘 -->
 			<n-tab-pane name="reveal">
 				<template #tab>
 					<span class="icon">
@@ -249,6 +370,7 @@ import {
 	IconMagnify,
 	IconScrollText,
 	IconSkull,
+	IconTrophy,
 } from "@iconify-prerendered/vue-mdi";
 import {
 	NModal,
@@ -262,6 +384,8 @@ import {
 	NEmpty,
 	useMessage,
 	NDivider,
+	NProgress,
+	NStatistic,
 } from "naive-ui";
 import { RoleMap, Faction, type RoleType } from "@/data/model";
 import { FACTION_COLORS } from "@/data/keywords";
@@ -364,62 +488,319 @@ const executeAccuracy = computed(() => {
 
 // ── 评级 ──
 
+interface ScoreBreakdownItem {
+	label: string;
+	score: number;
+	max: number;
+	pct: number;
+	detail: string;
+	tier: "good" | "ok" | "bad";
+}
+
+interface AchievementItem {
+	label: string;
+	score: number;
+	detail: string;
+	negative?: boolean;
+}
+
 interface RatingResult {
 	rating: string;
 	tagType: "success" | "info" | "warning" | "error" | "default";
 	totalScore: number;
 	achievements: string[];
+	breakdown: ScoreBreakdownItem[];
+	achievementItems: AchievementItem[];
 }
 
 const ratingResult = computed<RatingResult>(() => {
-	const win = props.record.win;
-	const rep = props.record.stats.finalReputation;
-	const days = props.record.stats.totalDays;
-	const goodAlive = props.record.stats.goodAlive;
+	const {
+		win,
+		stats: {
+			totalDays: days,
+			evilTotal,
+			goodTotal,
+			evilExecuted,
+			executeCount,
+			recallCount,
+			skillActivateCount,
+			goodAlive,
+			finalReputation,
+		},
+		config: { actionPoints: maxAP, reputation: initRep },
+	} = props.record;
 	const accuracy = executeAccuracy.value;
 	const achievements: string[] = [];
 
-	let baseScore = win ? 30 : 0;
+	// ── 各项分值计算 ──
+	const evilClearRate = evilTotal > 0 ? evilExecuted / evilTotal : 1;
+	const accScore = executeCount > 0 ? (accuracy / 100) * 15 : 0;
+	const effScore = Math.max(0, 10 - (days - 1) * 2);
+	const totalAP = maxAP * days;
+	const usedAP = recallCount * 2 + executeCount * 3 + skillActivateCount * 2;
+	const apUtilRate = totalAP > 0 ? Math.min(1, usedAP / totalAP) : 1;
+	const goodSurvivalRate = goodTotal > 0 ? goodAlive / goodTotal : 1;
+	const repRemainRate =
+		initRep > 0 ? Math.min(1, finalReputation / initRep) : 1;
 
-	let repScore = 0;
-	if (rep >= 20) repScore = 25;
-	else if (rep >= 15) repScore = 20 + ((rep - 15) / 5) * 5;
-	else if (rep >= 10) repScore = 15 + ((rep - 10) / 5) * 5;
-	else if (rep > 0) repScore = (rep / 10) * 15;
+	const baseScore = win ? 20 + evilClearRate * 15 : evilClearRate * 15;
+	const apScore = apUtilRate * 5;
+	const goodScore = goodSurvivalRate * 20;
+	const repScore = repRemainRate * 15;
 
-	let effScore = 0;
-	if (days <= 3) effScore = 15;
-	else if (days <= 5) effScore = 10 + ((5 - days) / 2) * 5;
-	else if (days <= 7) effScore = ((7 - days) / 2) * 10;
+	const breakdown: ScoreBreakdownItem[] = [
+		{
+			label: "胜利",
+			score: win ? 20 : 0,
+			max: 20,
+			pct: win ? 100 : 0,
+			detail: win ? "游戏胜利" : "游戏失败",
+			tier: win ? "good" : "bad",
+		},
+		{
+			label: "邪恶清除率",
+			score: evilClearRate * 15,
+			max: 15,
+			pct: evilClearRate * 100,
+			detail: `清除 ${evilExecuted}/${evilTotal}`,
+			tier:
+				evilClearRate >= 1 ? "good" : evilClearRate > 0 ? "ok" : "bad",
+		},
+		{
+			label: "处决精准度",
+			score: accScore,
+			max: 15,
+			pct: executeCount > 0 ? accuracy : 0,
+			detail:
+				executeCount > 0
+					? `处决 ${executeCount} 次，精准度 ${accuracy}%`
+					: "未进行处决",
+			tier: accuracy >= 100 ? "good" : accuracy >= 50 ? "ok" : "bad",
+		},
+		{
+			label: "效率",
+			score: effScore,
+			max: 10,
+			pct: (effScore / 10) * 100,
+			detail: `游戏花费 ${days} 天`,
+			tier: effScore >= 8 ? "good" : effScore >= 4 ? "ok" : "bad",
+		},
+		{
+			label: "行动力利用",
+			score: apScore,
+			max: 5,
+			pct: apUtilRate * 100,
+			detail: `总AP ${totalAP}，使用 ${usedAP}，利用率 ${Math.round(apUtilRate * 100)}%`,
+			tier: apUtilRate >= 0.8 ? "good" : apUtilRate >= 0.5 ? "ok" : "bad",
+		},
+		{
+			label: "善良存活率",
+			score: goodScore,
+			max: 20,
+			pct: goodSurvivalRate * 100,
+			detail: `${goodAlive}/${goodTotal} 存活，存活率 ${Math.round(goodSurvivalRate * 100)}%`,
+			tier:
+				goodSurvivalRate >= 1
+					? "good"
+					: goodSurvivalRate >= 0.5
+						? "ok"
+						: "bad",
+		},
+		{
+			label: "声望剩余率",
+			score: repScore,
+			max: 15,
+			pct: repRemainRate * 100,
+			detail: `最终 ${finalReputation}/${initRep}，剩余率 ${Math.round(repRemainRate * 100)}%`,
+			tier:
+				repRemainRate >= 1
+					? "good"
+					: repRemainRate >= 0.5
+						? "ok"
+						: "bad",
+		},
+	];
 
-	let goodScore = 0;
-	if (goodAlive >= 7) goodScore = 10;
-	else if (goodAlive >= 5) goodScore = 7 + ((goodAlive - 5) / 2) * 3;
-	else if (goodAlive >= 3) goodScore = ((goodAlive - 3) / 2) * 7;
-
-	let accScore = (accuracy / 100) * 10;
-
-	if (accuracy === 100 && props.record.stats.executeCount > 0)
-		achievements.push("零误杀");
-	if (win && days <= 3) achievements.push("速通");
-	const repNeverDrop = !props.record.events.some(
-		(e) => e.type === "reputationChange" && (e.meta as any)?.delta < 0,
-	);
-	if (repNeverDrop && win) achievements.push("完美守护");
+	// ── 成就 ──
+	// 一次遍历统计处决相关数据
+	let goodExecuted = 0;
+	let firstExecuteEvil = false;
+	let foundFirstExecute = false;
+	for (const e of props.record.events) {
+		if (e.type !== "execute") continue;
+		const tid = (e.meta as any)?.target;
+		if (tid == null || typeof tid !== "number") continue;
+		const role: RoleType | undefined = props.record.initRoles[tid];
+		if (!role) continue;
+		const isEvil =
+			RoleMap[role]?.faction === Faction.demon ||
+			RoleMap[role]?.faction === Faction.minion;
+		if (!isEvil) goodExecuted++;
+		if (!foundFirstExecute) {
+			firstExecuteEvil = isEvil;
+			foundFirstExecute = true;
+		}
+	}
+	// 未回忆玩家数
+	const unrecalled = evilTotal + goodTotal - recallCount;
 
 	let bonusScore = 0;
-	if (achievements.includes("零误杀")) bonusScore += 3;
-	if (achievements.includes("速通")) bonusScore += 2;
-	if (achievements.includes("完美守护") && !achievements.includes("零误杀"))
-		bonusScore += 3;
+	const achievementItems: AchievementItem[] = [];
 
-	const totalScore = Math.min(
-		100,
-		Math.round(
-			baseScore + repScore + effScore + goodScore + accScore + bonusScore,
-		),
+	// 正向
+	if (win && apUtilRate > 0.8) {
+		achievements.push("物尽其用");
+		bonusScore += 3;
+		achievementItems.push({
+			label: "物尽其用",
+			score: 3,
+			detail: `AP利用率 ${Math.round(apUtilRate * 100)}%，大于 80%`,
+		});
+	}
+	if (win && accuracy === 100 && executeCount > 0) {
+		achievements.push("铁血执法");
+		bonusScore += 5;
+		achievementItems.push({
+			label: "铁血执法",
+			score: 5,
+			detail: "所有处决均命中邪恶",
+		});
+	}
+	if (win && skillActivateCount < 3) {
+		achievements.push("技艺精湛");
+		bonusScore += 5;
+		achievementItems.push({
+			label: "技艺精湛",
+			score: 5,
+			detail: `使用技能 ${skillActivateCount} 次，小于 3 次`,
+		});
+	}
+	if (win && goodSurvivalRate >= 1) {
+		achievements.push("人民卫士");
+		bonusScore += 10;
+		achievementItems.push({
+			label: "人民卫士",
+			score: 10,
+			detail: "所有善良玩家存活",
+		});
+	}
+	if (win && days <= 3) {
+		achievements.push("速战速决");
+		bonusScore += 5;
+		achievementItems.push({
+			label: "速战速决",
+			score: 5,
+			detail: `经过 ${days} 天，少于等于 3 天。`,
+		});
+	}
+	if (win && days <= 1) {
+		achievements.push("雷厉风行");
+		bonusScore += 10;
+		achievementItems.push({
+			label: "雷厉风行",
+			score: 10,
+			detail: "1 天结束战斗",
+		});
+	}
+	if (win && firstExecuteEvil) {
+		achievements.push("一己之力");
+		bonusScore += 5;
+		achievementItems.push({
+			label: "一己之力",
+			score: 5,
+			detail: "首次处决即命中邪恶",
+		});
+	}
+	if (win && goodExecuted >= 2) {
+		achievements.push("亡羊补牢");
+		bonusScore += 2;
+		achievementItems.push({
+			label: "亡羊补牢",
+			score: 2,
+			detail: `误杀 ${goodExecuted} 名善良（大于等于 2 名）后仍获胜`,
+		});
+	}
+	if (win && unrecalled >= 3) {
+		achievements.push("料事如神");
+		bonusScore += 5;
+		achievementItems.push({
+			label: "料事如神",
+			score: 5,
+			detail: `${unrecalled} 人未回忆（大于等于 3 人）即获胜`,
+		});
+	}
+	if (win && unrecalled >= 5) {
+		achievements.push("游刃有余");
+		bonusScore += 10;
+		achievementItems.push({
+			label: "游刃有余",
+			score: 10,
+			detail: `${unrecalled} 人未回忆（大于等于 5 人）且获胜`,
+		});
+	}
+	if (win && finalReputation < 3) {
+		achievements.push("绝处逢生");
+		bonusScore += 3;
+		achievementItems.push({
+			label: "绝处逢生",
+			score: 3,
+			detail: `最终声望 ${finalReputation} （少于 3 点）险胜`,
+		});
+	}
+
+	// 反向
+	if (!win && evilExecuted === 0) {
+		achievements.push("尸位素餐");
+		bonusScore -= 5;
+		achievementItems.push({
+			label: "尸位素餐",
+			score: -5,
+			detail: "未处决任何邪恶",
+			negative: true,
+		});
+	}
+	if (days > 7) {
+		achievements.push("夜长梦多");
+		bonusScore -= 3;
+		achievementItems.push({
+			label: "夜长梦多",
+			score: -3,
+			detail: `经过 ${days} 天（大于 7 天）`,
+			negative: true,
+		});
+	}
+	if (goodExecuted > 0) {
+		achievements.push("滥杀无辜");
+		bonusScore -= 2;
+		achievementItems.push({
+			label: "滥杀无辜",
+			score: -2,
+			detail: `误杀 ${goodExecuted} 名善良`,
+			negative: true,
+		});
+	}
+	if (goodSurvivalRate <= 0.25) {
+		achievements.push("生灵涂炭");
+		bonusScore -= 5;
+		achievementItems.push({
+			label: "生灵涂炭",
+			score: -5,
+			detail: `善良存活率 ${Math.round(goodSurvivalRate * 100)}%（小于等于 25%）`,
+			negative: true,
+		});
+	}
+
+	const totalScore = Math.round(
+		baseScore +
+			accScore +
+			effScore +
+			apScore +
+			goodScore +
+			repScore +
+			bonusScore,
 	);
 
+	// ── 评级 ──
 	let rating: string;
 	let tagType: RatingResult["tagType"];
 	if (totalScore >= 90) {
@@ -431,7 +812,7 @@ const ratingResult = computed<RatingResult>(() => {
 	} else if (totalScore >= 60) {
 		rating = "B";
 		tagType = "info";
-	} else if (props.record.stats.evilExecuted > 0) {
+	} else if (evilExecuted > 0) {
 		rating = "C";
 		tagType = "default";
 	} else {
@@ -439,13 +820,33 @@ const ratingResult = computed<RatingResult>(() => {
 		tagType = "default";
 	}
 
-	return { rating, tagType, totalScore, achievements };
+	return {
+		rating,
+		tagType,
+		totalScore,
+		achievements,
+		breakdown,
+		achievementItems,
+	};
 });
 
 const rating = computed(() => ratingResult.value.rating);
 const ratingTagType = computed(() => ratingResult.value.tagType);
 const totalScore = computed(() => ratingResult.value.totalScore);
 const achievements = computed(() => ratingResult.value.achievements);
+const scoreBreakdown = computed(() => ratingResult.value.breakdown);
+const parseAchievements = computed(() => ratingResult.value.achievementItems);
+
+function tierToStatus(
+	tier: "good" | "ok" | "bad",
+): "success" | "warning" | "error" {
+	if (tier === "good") return "success";
+	if (tier === "ok") return "warning";
+	return "error";
+}
+
+const totalScoreDisplay = computed(() => totalScore.value);
+const ratingDisplay = computed(() => `评级：${rating.value}`);
 
 // ── 复盘时间线 ──
 

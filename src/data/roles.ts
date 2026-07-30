@@ -75,9 +75,106 @@ export type Alignment = typeof Alignment[keyof typeof Alignment];
 
 const _store = new Map<number, number>();
 
+// ── 通用辅助函数 ──
+
+/** 查找指定角色某个方向最近存活的角色（顺时针 cw / 逆时针 ccw） */
+function nearestAlive(c: Character, dir: 'cw' | 'ccw'): Character | undefined {
+    const dataStore = useDataStore();
+    const sz = dataStore.playerNumber();
+    const maxDist = Math.floor(sz / 2);
+    for (let i = 1; i <= maxDist; i++) {
+        const id = dir === 'cw' ? (c.id + i).wrap(sz) : (c.id - i).wrap(sz);
+        const ch = dataStore.chars.get(id);
+        if (ch && !ch.hasTag(TagType.dead)) return ch;
+    }
+    return undefined;
+}
+
+/** 查找角色两侧最近存活的角色 */
+function nearestAlivePair(c: Character): { cw: Character | undefined; ccw: Character | undefined } {
+    return { cw: nearestAlive(c, 'cw'), ccw: nearestAlive(c, 'ccw') };
+}
+
+// ── F4 首夜信息角色共享辅助函数 ──
+
+/** 从 faction 阵营中随机选一名玩家和另一名玩家组成对子 */
+function f4PickPair(c: Character, faction: Faction): { pair: Character[]; role: RoleType } | undefined {
+    const dataStore = useDataStore();
+    const inPlay = dataStore.charList().filter(x => x.id !== c.id && x.getRoleDetail().faction === faction);
+    if (inPlay.length === 0) return;
+    const target = randpick(inPlay).items[0]!;
+    const others = dataStore.charList().filter(x => x.id !== target.id && x.id !== c.id);
+    if (others.length === 0) return;
+    const pair = [target, randpick(others).items[0]!].sort((a, b) => a.id - b.id);
+    return { pair, role: target.role };
+}
+
+/** 找一名有 disguiseFaction 伪装的玩家和另一名玩家组成对子 */
+function f4DisguisePair(c: Character, disguiseFaction: Faction): { pair: Character[]; role: RoleType } | undefined {
+    const dataStore = useDataStore();
+    const candidates = dataStore.charList().filter(x =>
+        x.id !== c.id && x.hasTag(TagType.disguise) &&
+        RoleMap[x.getTag(TagType.disguise)[0]!.meta as RoleType]?.faction === disguiseFaction
+    );
+    if (candidates.length === 0) return;
+    const target = randpick(candidates).items[0]!;
+    const disRole = target.getTag(TagType.disguise)[0]!.meta as RoleType;
+    const others = dataStore.charList().filter(x => x.id !== target.id && x.id !== c.id);
+    if (others.length === 0) return;
+    const pair = [target, randpick(others).items[0]!].sort((a, b) => a.id - b.id);
+    return { pair, role: disRole };
+}
+
+/** 随机两名玩家 + 一个两者都不是的 faction 身份 */
+function f4RandomWrongPair(c: Character, faction: Faction): { pair: Character[]; role: RoleType } | undefined {
+    const dataStore = useDataStore();
+    const allPs = dataStore.charList().filter(x => x.id !== c.id);
+    if (allPs.length < 2) return;
+    const two = randpick(allPs, 2).items;
+    const taken = new Set<RoleType>();
+    two.forEach(x => taken.add(x.role));
+    two.forEach(x => {
+        const dis = x.getTag(TagType.disguise)[0];
+        if (dis && RoleMap[dis.meta as RoleType]?.faction === faction) taken.add(dis.meta as RoleType);
+    });
+    const valid = allRoleKeys().filter(k => RoleMap[k].faction === faction && !taken.has(k));
+    const role = valid.length > 0 ? randpick(valid).items[0]! : randpick(allRoleKeys(), 1, k => RoleMap[k].faction === faction).items[0]!;
+    const pair = two.sort((a, b) => a.id - b.id);
+    return { pair, role };
+}
+
+/**
+ * F4 神志不清/伪装分支：70%伪装 + 20%随机错误 + 10%（数量为0→告知没有，否则伪装）
+ * @param zeroMsg 数量为0时显示的提示文本（含 :: 标记）
+ */
+function f4HandleNotAwake(c: Character, faction: Faction, countMin: number, zeroMsg: string): void {
+    const roll = randint(1, 100);
+    const doDisguise = () => {
+        const r = f4DisguisePair(c, faction);
+        if (!r) return false;
+        c.info.push(`#${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::。`);
+        logSkillResolution(c.id, `得知 #${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::（伪装）`);
+        return true;
+    };
+    const doRandomWrong = () => {
+        const r = f4RandomWrongPair(c, faction);
+        if (!r) return;
+        c.info.push(`#${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::。`);
+        logSkillResolution(c.id, `得知 #${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::（均不是该身份）`);
+    };
+
+    if (roll <= 70) { if (!doDisguise()) doRandomWrong(); }
+    else if (roll <= 90) { doRandomWrong(); }
+    else if (countMin === 0) {
+        c.info.push(zeroMsg);
+        logSkillResolution(c.id, `得知${zeroMsg}（神志不清）`);
+    } else if (!doDisguise()) doRandomWrong();
+}
+
 const roles = {
     unknown: {
         display: '失忆者',
+        summery: '“等下，你说了啥？谁？哦，没事了。等下，你说了啥？”',
         faction: Faction.unknown,
         ability: `你可以通过::recall::来得知该玩家是什么角色。`
     },
@@ -85,6 +182,7 @@ const roles = {
     Alchemist: {
         display: '炼金术士',
         faction: Faction.villager,
+        summery: '“探寻地球本质。加以矫正，你将寻得秘石。黄金之上皆是红色。那是真理之冠。”',
         ability: `
         在::dawn::或::dusk::，你可以::clean::与你::distance::3的玩家中::confused::的玩家。每局仅一次。
 
@@ -127,7 +225,7 @@ const roles = {
     Soldier: {
         display: "士兵",
         faction: Faction.villager,
-        summery: "帝国最忠贞的护卫。",
+        summery: `“就像大卫对歌利亚所说，像忒修斯对米诺陶所说，也像阿周那对福授所说的那样……绝不。”`,
         ability: "不会在夜里死亡。",
         abnormal: {
             overall: "仍会正常死亡。",
@@ -143,6 +241,7 @@ const roles = {
     Nun: {
         display: "修女",
         faction: Faction.villager,
+        summery: "“我是纯洁的。就让那些无罪之人匍匐在地，替我受苦吧。我的名誉不应被你恶毒的指控所玷污。”",
         ability: "::recall::时，她总是会回答：愿圣光见证，我的灵魂洁白如雪。",
         abnormal: {
             overall: "她会回答：我……我有点晕。"
@@ -158,6 +257,7 @@ const roles = {
     Architect: {
         display: "建筑师",
         faction: Faction.villager,
+        summery: "“我会建造一座宏伟的城市。它将是人类文明的巅峰。”",
         ability: `
         ::recall::时，你会得知哪半边的::evil::更多。
         
@@ -212,6 +312,7 @@ const roles = {
     Farmer: {
         display: "农夫",
         faction: Faction.villager,
+        summery: "“即使那些高高在上的人也需要吃东西。没有了我们，城市就会挨饿。”",
         ability: `::recall::时，如果可能，1名失忆的::villager::会变成新的农夫，并得知原来的身份。`,
         abnormal: {
             overall: "得知正确的原来的身份，不会有人变成农夫。"
@@ -241,6 +342,7 @@ const roles = {
     Nurse: {
         display: "护士",
         faction: Faction.villager,
+        summery: "“我会照顾好每一个人。即使是那些不值得的人。”",
         ability: `白天时，你可以选择得知与你最近的::confused::的玩家与你的距离。每局游戏限两次。`,
         abnormal: {
             overall: "得知随机一位::awake::的玩家与你的距离。"
@@ -298,6 +400,7 @@ const roles = {
     Professor: {
         display: "教授",
         faction: Faction.villager,
+        summery: "“过程很简单。将液压植入器连接到改良型气矩阵放大器上，加入20CC的伪多拉芬，让他的参数Z保持在20%以上，你丈夫就会重新活蹦乱跳。现在，我们需要的仅仅是一次雷击。”",
         ability: `白天，你可以选择一名死亡玩家，若该玩家为::villager::，使其复活、::awake::并重新::recall::身份。每局游戏限一次。`,
         abnormal: {
             overall: "无事发生。"
@@ -338,6 +441,7 @@ const roles = {
     Bishop: {
         display: "主教",
         faction: Faction.villager,
+        summery: "“我会为你们祈祷。即使你们不信仰上帝。”",
         ability: `::recall::时，你获知三名玩家，其中一名是::villager::，一名是::outsider::，一名是::minion::。`,
         abnormal: {
             overall: "这三名玩家是随机选择的。"
@@ -611,22 +715,9 @@ const roles = {
             return 0;
         },
         onNightSkill(c, t) {
-            const dataStore = useDataStore();
-            const sz = dataStore.playerNumber();
-
             if (!c.hasRecalled()) return;
-
-            let count = 0;
-            let cw;
-            for (let i = 1; i <= Math.floor(sz / 2); i++) {
-                cw = dataStore.chars.get((c.id + i).wrap(sz));
-                if (cw && !cw.hasTag(TagType.dead)) { count += cw.isEvil() ? 1 : 0; break; }
-            }
-            let ccw;
-            for (let i = 1; i <= Math.floor(sz / 2); i++) {
-                ccw = dataStore.chars.get((c.id - i).wrap(sz));
-                if (ccw && !ccw.hasTag(TagType.dead)) { count += ccw.isEvil() ? 1 : 0; break; }
-            }
+            const { cw, ccw } = nearestAlivePair(c);
+            let count = (cw?.isEvil() ? 1 : 0) + (ccw?.isEvil() ? 1 : 0);
 
             if (!c.isAwake('Empath')) {
                 if (count === 0) count = 1 + randint(0, 1);
@@ -818,21 +909,36 @@ const roles = {
     Grandma: {
         display: '祖母',
         faction: Faction.villager,
-        ability: '::recall::时，得知一名善良玩家及其角色，若该玩家死亡，祖母一同死亡。',
+        ability: '::recall::时，得知一名::kind::及其角色，若该玩家死亡，祖母一同死亡。',
         abnormal: {
-            overall: "你会得知一名邪恶玩家，若该玩家死亡，祖母不会死亡。"
+            overall: "你会得知一名::evil::（若不存在则会选择随机一名玩家），若该玩家死亡，祖母不会死亡。"
         },
         onRecall(c) {
-            let ans: Character, role: RoleType;
+            let ans: Character | undefined, role: RoleType | undefined;
             const data = useDataStore();
-            ans = randpick(data.charList(), 1, (ch) => !ch.isEvil() && ch.id !== c.id).items[0]!;
-            role = ans.role;
-            if (!c.isAwake('Grandma')) {
-                ans = randpick(data.charList(), 1, (ch) => ch.isTrulyEvil() && ch.id !== c.id).items[0]!;
-                role = ans.getTag(TagType.disguise)[0]?.meta!;
+
+            if (c.isAwake('Grandma')) {
+                // 正常：得知一名善良玩家及其角色
+                ans = randpick(data.charList(), 1, (ch) => !ch.isEvil() && ch.id !== c.id).items[0];
+                role = ans?.role;
+            } else {
+                // 异常：得知一名邪恶玩家（伪装角色/神志不清）
+                ans = randpick(data.charList(), 1, (ch) => ch.isTrulyEvil() && ch.id !== c.id).items[0];
+                if (ans) {
+                    role = ans.getTag(TagType.disguise)[0]?.meta as RoleType | undefined ?? ans.role;
+                } else {
+                    // 没有其他邪恶角色时降级为随机善良玩家
+                    ans = randpick(data.charList(), 1, (ch) => ch.id !== c.id).items[0];
+                    role = ans?.role;
+                }
             }
-            ans.addTag(TagType.grandson, { source: c.id });
-            c.info.push(`#${ans.id} 是${RoleMap[role].display}。`)
+
+            if (ans && role) {
+                ans.addTag(TagType.grandson, { source: c.id });
+                c.info.push(`#${ans.id} 是${RoleMap[role].display}。`);
+            } else {
+                c.info.push('未能获取到有效信息。');
+            }
         },
     },
     Monk: {
@@ -916,6 +1022,22 @@ const roles = {
             chosen[1]!.addTag(TagType.protect, { till });
         },
     },
+    Pacifist: {
+        display: '和平主义者',
+        faction: Faction.villager,
+        ability: '被处决的::kind::60%可能不会死亡。',
+        abnormal: {
+            overall: "::kind::不会获得保护。"
+        },
+        onRecall(c) {
+            const dataStore = useDataStore();
+            dataStore.chars.forEach(ch => {
+                if (ch.alignment === Alignment.good) {
+                    ch.addTag(TagType.pacifist, { source: c.id });
+                }
+            })
+        }
+    },
 
     // ── 首夜 F4（第一夜信息角色）──
     Washerwoman: {
@@ -923,43 +1045,25 @@ const roles = {
         faction: Faction.villager,
         ability: `::recall::后的首夜，你会得知两名玩家，其中一名是某个特定的::villager::。`,
         abnormal: {
-            overall: "你会得知错误的玩家或角色。",
+            overall: "你会必定得知错误的玩家或角色。",
         },
-        onStart(c) {
-            c.limitSkill('skill', 1);
-        },
-        nightActionPriority() {
-            return 6;
-        },
-        onNightSkill(c, t) {
+        onStart(c) { c.limitSkill('skill', 1); },
+        nightActionPriority() { return 6; },
+        onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
-            const dataStore = useDataStore();
-            const inPlay = dataStore.charList().filter(
-                x => x.id !== c.id && x.getRoleDetail().faction === Faction.villager
-            );
-            if (inPlay.length === 0) return;
-
-            // 随机选取一个在场的镇民角色
-            const target = randpick(inPlay).items[0]!;
-            const targetRole = target.role;
-
-            // 选取该玩家和另一名玩家组成对子
-            const others = dataStore.charList().filter(x => x.id !== target.id && x.id !== c.id);
-            if (others.length === 0) return;
-            const other = randpick(others).items[0]!;
-            const pair = shuffle([target, other]);
-
-            if (!c.isAwake('Washerwoman')) {
-                const wrongRole = randpick(allRoleKeys(), 1,
-                    k => RoleMap[k].faction === Faction.villager && k !== targetRole
-                ).items[0] ?? targetRole;
-                c.info.push(`#${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${wrongRole}::。`);
-                logSkillResolution(c.id,
-                    `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${wrongRole}::（实际::${targetRole}::）`);
+            const ds = useDataStore();
+            if (ds.villagerMin === 0 && ds.villagerMax === 0) {
+                c.info.push('场上没有::villager::。');
+                logSkillResolution(c.id, '得知场上没有镇民（数量范围为0）');
+                c.useSkill('skill'); return;
+            }
+            if (c.isAwake('Washerwoman')) {
+                const r = f4PickPair(c, Faction.villager);
+                if (!r) return;
+                c.info.push(`#${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::。`);
+                logSkillResolution(c.id, `得知 #${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::`);
             } else {
-                c.info.push(`#${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::。`);
-                logSkillResolution(c.id,
-                    `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::`);
+                f4HandleNotAwake(c, Faction.villager, ds.villagerMin, '场上没有::villager::。');
             }
             c.useSkill('skill');
         },
@@ -969,50 +1073,33 @@ const roles = {
         faction: Faction.villager,
         ability: `::recall::后的首夜，你会得知两名玩家，其中一名是某个特定的::outsider::。（如果场上没有::outsider::，你会得知没有::outsider::。）`,
         abnormal: {
-            overall: "你会得知错误的玩家或角色。",
+            overall: "你会得知错误的玩家或角色。若场上**不可能**有::outsider::，你会得知没有::outsider::，即使你的技能异常。",
         },
-        onStart(c) {
-            c.limitSkill('skill', 1);
-        },
-        nightActionPriority() {
-            return 5;
-        },
-        onNightSkill(c, t) {
+        onStart(c) { c.limitSkill('skill', 1); },
+        nightActionPriority() { return 5; },
+        onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
-            const dataStore = useDataStore();
-            const outsiderChars = dataStore.charList().filter(
-                x => x.id !== c.id && x.getRoleDetail().faction === Faction.outsider
-            );
-
-            if (outsiderChars.length === 0) {
-                if (!c.isAwake('Librarian')) {
-                    c.info.push('场上没有::outsider::。');
-                    logSkillResolution(c.id, '得知场上没有外来者（异常：信息正确）');
-                } else {
+            const ds = useDataStore();
+            if (ds.outsiderMin === 0 && ds.outsiderMax === 0) {
+                c.info.push('场上没有::outsider::。');
+                logSkillResolution(c.id, '得知场上没有外来者（数量范围为0）');
+                c.useSkill('skill'); return;
+            }
+            if (c.isAwake('Librarian')) {
+                const outsiders = ds.charList().filter(
+                    x => x.id !== c.id && x.getRoleDetail().faction === Faction.outsider
+                );
+                if (outsiders.length === 0) {
                     c.info.push('场上没有::outsider::。');
                     logSkillResolution(c.id, '得知场上没有::outsider::');
+                } else {
+                    const r = f4PickPair(c, Faction.outsider);
+                    if (!r) return;
+                    c.info.push(`#${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::。`);
+                    logSkillResolution(c.id, `得知 #${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::`);
                 }
-                return;
-            }
-
-            const target = randpick(outsiderChars).items[0]!;
-            const targetRole = target.role;
-            const others = dataStore.charList().filter(x => x.id !== target.id && x.id !== c.id);
-            if (others.length === 0) return;
-            const other = randpick(others).items[0]!;
-            const pair = shuffle([target, other]);
-
-            if (!c.isAwake('Librarian')) {
-                const wrongRole = randpick(allRoleKeys(), 1,
-                    k => RoleMap[k].faction === Faction.outsider && k !== targetRole
-                ).items[0] ?? targetRole;
-                c.info.push(`#${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${wrongRole}::。`);
-                logSkillResolution(c.id,
-                    `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${wrongRole}::（实际::${targetRole}::）`);
             } else {
-                c.info.push(`#${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::。`);
-                logSkillResolution(c.id,
-                    `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::`);
+                f4HandleNotAwake(c, Faction.outsider, ds.outsiderMin, '场上没有::outsider::。');
             }
             c.useSkill('skill');
         },
@@ -1020,47 +1107,52 @@ const roles = {
     Investigator: {
         display: '调查员',
         faction: Faction.villager,
-        ability: `::recall::后的首夜，你会得知两名玩家，其中一名是某个特定的::minion::。若场上没有::minion::，你会得知没有::minion::。`,
+        ability: `::recall::后的首夜，你会得知两名玩家，其中一名是某个特定的::minion::。（如果场上没有::minion::，你会得知没有::minion::。）`,
         abnormal: {
-            overall: "你会得知错误的玩家或角色。",
+            overall: "你会得知错误的玩家或角色。若场上**不可能**有::minion::，你会得知没有::minion::，即使你的技能异常。",
         },
-        onStart(c) {
-            c.limitSkill('skill', 1);
-        },
-        nightActionPriority() {
-            return 4;
-        },
-        onNightSkill(c, t) {
+        onStart(c) { c.limitSkill('skill', 1); },
+        nightActionPriority() { return 4; },
+        onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
-            const dataStore = useDataStore();
-            const minionChars = dataStore.charList().filter(
-                x => x.id !== c.id && x.getRoleDetail().faction === Faction.minion
-            );
+            const ds = useDataStore();
+            const possibleMinions = ds.possibleEvil.filter(r => RoleMap[r]?.faction === Faction.minion);
 
-            if (minionChars.length === 0) {
-                c.info.push('场上没有::minion::。');
-                logSkillResolution(c.id, '得知场上没有::minion::。');
-                return;
-            }
-
-            const target = randpick(minionChars).items[0]!;
-            const targetRole = target.role;
-            const others = dataStore.charList().filter(x => x.id !== target.id && x.id !== c.id);
-            if (others.length === 0) return;
-            const other = randpick(others).items[0]!;
-            const pair = shuffle([target, other]);
-
-            if (!c.isAwake('Investigator')) {
-                const wrongRole = randpick(allRoleKeys(), 1,
-                    k => RoleMap[k].faction === Faction.minion && k !== targetRole
-                ).items[0] ?? targetRole;
-                c.info.push(`#${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${wrongRole}::。`);
-                logSkillResolution(c.id,
-                    `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${wrongRole}::（实际::${targetRole}::）`);
+            if (c.isAwake('Investigator')) {
+                const minionChars = ds.charList().filter(
+                    x => x.id !== c.id && x.getRoleDetail().faction === Faction.minion
+                );
+                if (minionChars.length === 0 || possibleMinions.length === 0) {
+                    c.info.push('场上没有::minion::。');
+                    logSkillResolution(c.id, '得知场上没有::minion::');
+                    c.useSkill('skill'); return;
+                }
+                const r = f4PickPair(c, Faction.minion);
+                if (!r) return;
+                c.info.push(`#${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::。`);
+                logSkillResolution(c.id, `得知 #${r.pair[0]!.id} 和 #${r.pair[1]!.id} 中有一名::${r.role}::`);
             } else {
+                const allPs = ds.charList().filter(x => x.id !== c.id);
+                if (allPs.length < 2) return;
+                const two = randpick(allPs, 2).items;
+                const taken = new Set<RoleType>();
+                two.forEach(x => taken.add(x.role));
+                two.forEach(x => {
+                    const dis = x.getTag(TagType.disguise)[0];
+                    if (dis) taken.add(dis.meta as RoleType);
+                });
+                const validMinions = possibleMinions.filter(r => !taken.has(r));
+                if (possibleMinions.length === 0) {
+                    c.info.push('场上没有::minion::。');
+                    logSkillResolution(c.id, '得知场上没有::minion::');
+                    c.useSkill('skill'); return;
+                }
+                const targetRole = validMinions.length > 0
+                    ? randpick(validMinions).items[0]!
+                    : randpick(possibleMinions).items[0]!;
+                const pair = two.sort((a, b) => a.id - b.id);
                 c.info.push(`#${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::。`);
-                logSkillResolution(c.id,
-                    `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::`);
+                logSkillResolution(c.id, `得知 #${pair[0]!.id} 和 #${pair[1]!.id} 中有一名::${targetRole}::（均不是该身份）`);
             }
             c.useSkill('skill');
         },
@@ -1369,10 +1461,8 @@ const roles = {
             const dataStore = useDataStore();
             const sz = dataStore.chars.size;
             if (c.isAwake('Poisoner')) {
-                let obj = dataStore.chars.get((c.id + 1).wrap(sz))!;
-                fn(obj);
-                obj = dataStore.chars.get((c.id - 1).wrap(sz))!
-                fn(obj);
+                fn(nearestAlive(c, 'cw')!);
+                fn(nearestAlive(c, 'ccw')!);
             } else {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
             }
@@ -1919,13 +2009,14 @@ function buildHerbDoctorPremise(target: Character, awake: boolean): string {
 - 词语应为 2\~4 个汉字（或一个英文单词），必须有明确含义。
 - 该词可以来自能力描述中的某个关键词，如"夜晚"、"死亡"、"公开"等；也可以是对能力的概括性描述，如"勇敢"、"牺牲"、"伪装"等。
 - 不能是无法组成词语的字拼接在一起。
-- 建议在游戏早期尽量提供模糊的词语，避免郎中迅速确定对方的具体角色。尤其对于邪恶身份，不要提供过于明显的信息。如：普卡，可以提供“神志不清”，而不是“毒素”。${!awake ? '\n- 由于郎中神志不清，请给出一个与该玩家能力无关的随机词语。' : ''}
+- 建议在游戏早期尽量提供模糊的词语，避免郎中迅速确定对方的具体角色。尤其对于邪恶身份，不要提供过于明显的信息。如：普卡，可以提供“神志不清”，而不是“毒素”。${!awake ? '\n- 由于郎中神志不清，请给出一个与该玩家能力无关的随机词语。若该玩家有伪装，你可以给出与该玩家伪装能力有关的词语。' : ''}
 
 示例：
 1. 第一晚，郎中选择了教授，得知的词语是"死亡"。因为教授的技能对象为死亡玩家。第二晚，郎中仍选择教授，得知“逆转”，因为教授的技能可以逆转死亡玩家的状态。
 2. 郎中选择了酒鬼，得知的词语是"神志不清"。因为酒鬼的技能会让自己和目标玩家醉酒。
 3. 郎中选择了刺客，得知的词语是"死亡"。因为刺客的技能会在第二个夜晚杀死一名玩家。
 4. 郎中选择了建筑师，得知的词语是“邪恶”。因为建筑师的技能描述中有“邪恶”一词。
+5. 神志不清的郎中选择了普卡，得知的词语是“保护”。因为普卡伪装成的僧侣的技能能够保护玩家。
 
 【回答格式】
 请仅回复以下 JSON 格式：

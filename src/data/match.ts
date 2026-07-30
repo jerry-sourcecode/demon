@@ -18,6 +18,8 @@ export interface MatchStats {
     totalDays: number;
     executeCount: number;
     recallCount: number;
+    /** 主动技能发动次数 */
+    skillActivateCount: number;
     finalReputation: number;
     evilExecuted: number;
     goodAlive: number;

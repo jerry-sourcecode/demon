@@ -74,12 +74,12 @@ export const useMatchStore = defineStore('match', () => {
         initRoles: Record<number, RoleType>,
         chars: Map<number, Character>,
     ): MatchRecord {
-        // 计算统计
-        const totalDays = events.length > 0
-            ? new Set(events.map(e => Time.getDay(e.time))).size
-            : 0;
+        // 计算统计（以 gameEnd 事件的实际天数为准）
+        const gameEndEvent = events.find(e => e.type === 'gameEnd');
+        const totalDays = gameEndEvent ? Time.getDay(gameEndEvent.time) : 0;
         const executeCount = events.filter(e => e.type === 'execute').length;
         const recallCount = events.filter(e => e.type === 'recall').length;
+        const skillActivateCount = events.filter(e => e.type === 'skillActivate').length;
         const endEvent = events.find(e => e.type === 'gameEnd');
         const finalReputation = (endEvent?.meta as any)?.reputation ?? 0;
 
@@ -110,6 +110,7 @@ export const useMatchStore = defineStore('match', () => {
             totalDays,
             executeCount,
             recallCount,
+            skillActivateCount,
             finalReputation,
             evilExecuted,
             goodAlive,

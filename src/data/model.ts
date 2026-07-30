@@ -26,9 +26,10 @@ interface TagMetaMap {
     recall: undefined;
     grandson: undefined;
     executed: undefined;
-    nemesis: undefined,
-    protect: undefined,
-    retained: undefined
+    nemesis: undefined;
+    protect: undefined;
+    retained: undefined;
+    pacifist: undefined;
 }
 
 /** Tag 精确类型（discriminated union，meta 随 type 自动收窄） */

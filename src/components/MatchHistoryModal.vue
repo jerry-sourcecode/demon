@@ -149,6 +149,8 @@ function onClearAll() {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	max-height: 60vh;
+	overflow-y: auto;
 }
 .list-header {
 	display: flex;
