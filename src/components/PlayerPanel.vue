@@ -94,7 +94,7 @@
 								? 'selectable'
 								: null
 					"
-					@action-done="finishAction" />
+					@action-done="() => finishAction('action-done')" />
 			</div>
 		</div>
 		<!-- 游戏结束弹窗 -->
@@ -402,6 +402,9 @@ function startUserAction() {
 	midDoneBtn.value = true;
 	midDisplay.value = true;
 	midText.value = `现在是${dataStore.currentTimeString()}，玩家可以进行行动。`;
+	console.log(
+		`[Game] wait-for-action: 时段=${dataStore.currentTimeString()}, AP=${dataStore.actionPoints}, gameOver=${dataStore.gameOver}`,
+	);
 }
 
 emitter.on("wait-for-action", () => {
@@ -411,7 +414,10 @@ emitter.on("wait-for-action", () => {
 	});
 });
 
-function finishAction() {
+function finishAction(source: string = "unknown") {
+	console.log(
+		`[Game] finishAction(来源=${source}): waitRes=${!!waitRes.value}, AP=${dataStore.actionPoints}, midDisplay=${midDisplay.value}`,
+	);
 	if (!waitRes.value) {
 		return;
 	}
@@ -423,16 +429,21 @@ function finishAction() {
 }
 
 function midDoneBtnClick() {
+	console.log(`[Game] 点击「结束」按钮: AP=${dataStore.actionPoints}`);
 	dataStore.actionPoints = 0;
-	finishAction();
+	finishAction("midDoneBtn");
 }
 
 /** 兜底：行动点归 0 时自动推进（防止因 Promise 异常丢失导致卡死） */
 watch(
 	() => dataStore.actionPoints,
-	(val) => {
+	(val, old) => {
+		console.log(
+			`[Game] AP变化: ${old} → ${val}, waitRes=${!!waitRes.value}, gameOver=${dataStore.gameOver}, midDisplay=${midDisplay.value}`,
+		);
 		if (val <= 0 && !dataStore.gameOver && waitRes.value) {
-			finishAction();
+			console.log(`[Game] 兜底触发 finishAction`);
+			finishAction("watch-AP");
 		}
 	},
 );

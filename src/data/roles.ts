@@ -170,12 +170,17 @@ const roles = {
             const dataStore = useDataStore();
             const half = Math.ceil((dataStore.playerNumber() + 1) / 2)
             let cnt_l = ref(0), cnt_r = ref(0);
+            let rightNeedAdd = 0;
+            if (dataStore.playerNumber() % 2 === 1) {
+                rightNeedAdd = 1;
+            }
+            c.info.push(`**右半圈**是指 #1 ~ #${half}，**左半圈**是指 #${half + rightNeedAdd} ~ #${dataStore.playerNumber()} 以及 #1。`);
             for (let i = 1; i <= half; i++) {
                 if (dataStore.chars.get(i)?.isEvil()) {
                     cnt_r.value++;
                 }
             }
-            for (let i = half + 1; i <= dataStore.playerNumber(); i++) {
+            for (let i = half + rightNeedAdd; i <= dataStore.playerNumber(); i++) {
                 if (dataStore.chars.get(i)?.isEvil()) {
                     cnt_l.value++;
                 }
@@ -196,11 +201,11 @@ const roles = {
             }
 
             if (cnt_l.value > cnt_r.value) {
-                c.info.push("左半圈::evil::更多。");
+                c.info.push("**左半圈**::evil::更多。");
             } else if (cnt_r.value > cnt_l.value) {
-                c.info.push("右半圈::evil::更多。");
+                c.info.push("**右半圈**::evil::更多。");
             } else {
-                c.info.push("左右半圈::evil::数量相同。");
+                c.info.push("左右半圈::evil::数量**相同**。");
             }
         },
     },
@@ -293,7 +298,7 @@ const roles = {
     Professor: {
         display: "教授",
         faction: Faction.villager,
-        ability: `白天，你可以选择一名死亡玩家，若该玩家为::villager::，使其复活、::awake::并重新宣称身份。每局游戏限一次。`,
+        ability: `白天，你可以选择一名死亡玩家，若该玩家为::villager::，使其复活、::awake::并重新::recall::身份。每局游戏限一次。`,
         abnormal: {
             overall: "无事发生。"
         },
@@ -854,6 +859,8 @@ const roles = {
 
             logSkillActivate(c.id);
 
+            c.info.push(`在${Time.getTimeString(t)}，保护了 #${chosen[0]!.id}。`);
+
             if (!c.isAwake('Monk')) {
                 logSkillResolution(c.id, `选择了 #${chosen[0]!.id}，但是由于神志不清，技能未能生效。`);
                 return;
@@ -885,6 +892,8 @@ const roles = {
             if (!chosen || chosen.length < 2) return;
 
             logSkillActivate(c.id);
+
+            c.info.push(`在${Time.getTimeString(t)}，保护了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，其中一人会::drunk::。`);
 
             if (!c.isAwake('Innkeeper')) {
                 logSkillResolution(c.id, `选择了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，但是由于神志不清，技能未能生效。`);
@@ -1224,7 +1233,7 @@ const roles = {
                         logSkillResolution(c.id, `死亡时选择了 #${obj?.id}（::${obj?.role}::）导致其死亡`);
                         obj?.addTag('dead', { meta: { type: 'moonchild' } });
                         dataStore.reputation--;
-                        logReputationChange(-1, `#${c.id} ::${c.role}:: 选择了一名::kind::`)
+                        logReputationChange(-1, `#${c.id} 作为::Moonchild::选择了一名::kind::`)
                     })
 
             }

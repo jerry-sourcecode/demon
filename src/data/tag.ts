@@ -95,9 +95,9 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
                 repDelta = data.reputation - repBefore;
                 if (type === 'execute') {
                     repDelta -= 3;
-                    logReputationChange(repDelta, `#${c.id} ::${c.role}:: 被处决`);
+                    logReputationChange(repDelta, `#${c.id} 被处决`);
                 } else {
-                    logReputationChange(repDelta, `#${c.id} ::${c.role}:: 死于非命`);
+                    logReputationChange(repDelta, `#${c.id} 死于非命`);
                 }
             }
 

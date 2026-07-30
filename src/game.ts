@@ -36,7 +36,11 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
 /** 将 count 个随机 factionA 角色替换为不在场的 factionB 角色 */
 function swapRoles(from: Faction, to: Faction, count: number) {
     const dataStore = useDataStore();
-    const allTo = allRoleKeys().filter(k => RoleMap[k].faction === to);
+    const allTo = allRoleKeys().filter(k => {
+        if (RoleMap[k].faction !== to) return false;
+        if (RoleMap[k].requiresAI && !dataStore.aiConfigured) return false;
+        return true;
+    });
     const presentTo = new Set(
         dataStore.charList().filter(c => c.getRoleDetail().faction === to).map(c => c.role)
     );
@@ -250,15 +254,21 @@ async function runGameLoop(
     emitter: ReturnType<typeof useEmitter>,
 ) {
     let gameEnded = false;
+    let loopIter = 0;
     while (!gameEnded) {
+        loopIter++;
         dataStore.nextTime();
+        const timeStr = Time.getTimeString(dataStore.time);
+        console.log(`[GameLoop] #${loopIter} 进入 ${timeStr}, AP=${dataStore.actionPoints}, gameOver=${dataStore.gameOver}`);
 
         if (checkGameEnd(dataStore, emitter)) {
+            console.log(`[GameLoop] #${loopIter} 游戏结束检查通过`);
             gameEnded = true;
             break;
         }
 
         if (Time.getPhase(dataStore.time) === Time.Phase.Night) {
+            console.log(`[GameLoop] #${loopIter} 开始处理夜间技能`);
             // onTimeChange：无优先级，阶段切换时即时触发
             dataStore.chars.forEach(x => {
                 if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
@@ -281,9 +291,13 @@ async function runGameLoop(
             });
             order.sort((a, b) => b.prio - a.prio);
             for (const x of order) {
+                console.log(`[GameLoop] #${loopIter} 执行夜间技能: #${x.c.id}(${RoleMap[x.role].display})`);
                 await runFn(RoleMap[x.role].onNightSkill, x.c, dataStore.time);
             }
+            console.log(`[GameLoop] #${loopIter} 夜间技能处理完毕`);
         } else {
+            const phaseName = Time.PHASE_NAMES[Time.getPhase(dataStore.time)];
+            console.log(`[GameLoop] #${loopIter} 非夜间阶段: ${phaseName}`);
             dataStore.chars.forEach(x => {
                 if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
                 runFn(RoleMap[x.role].onTimeChange, x, dataStore.time);
@@ -292,14 +306,21 @@ async function runGameLoop(
             })
             if (Time.getPhase(dataStore.time) === Time.Phase.Day) {
                 dataStore.resetActionPoints();
+                console.log(`[GameLoop] #${loopIter} 进入白天, AP已重置为${dataStore.actionPoints}`);
+                let dayIter = 0;
                 while (dataStore.actionPoints > 0 && !dataStore.gameOver) {
+                    dayIter++;
+                    console.log(`[GameLoop] #${loopIter} 白天等待操作 #${dayIter}, AP=${dataStore.actionPoints}`);
                     await emitter.emit('wait-for-action')
+                    console.log(`[GameLoop] #${loopIter} 白天操作完成 #${dayIter}, AP=${dataStore.actionPoints}, gameOver=${dataStore.gameOver}`);
                     // 每次操作后立即检查胜负
                     if (checkGameEnd(dataStore, emitter)) {
+                        console.log(`[GameLoop] #${loopIter} 白天操作后游戏结束`);
                         gameEnded = true;
                         break;
                     }
                 }
+                console.log(`[GameLoop] #${loopIter} 白天结束, 离开时 AP=${dataStore.actionPoints}, gameOver=${dataStore.gameOver}, gameEnded=${gameEnded}`);
             } else {
                 let needMove = false;
                 dataStore.chars.forEach(x => {
@@ -315,9 +336,11 @@ async function runGameLoop(
                     }
                 })
                 if (needMove && !dataStore.gameOver) {
+                    console.log(`[GameLoop] #${loopIter} ${phaseName} 有可发动技能, 等待操作`);
                     await emitter.emit('wait-for-action')
                     // 操作后立即检查胜负
                     if (checkGameEnd(dataStore, emitter)) {
+                        console.log(`[GameLoop] #${loopIter} ${phaseName} 操作后游戏结束`);
                         gameEnded = true;
                     }
                 }
@@ -327,9 +350,11 @@ async function runGameLoop(
         // 每轮结束再次检查（处决可能导致立即结束）
         if (!gameEnded) {
             if (checkGameEnd(dataStore, emitter)) {
+                console.log(`[GameLoop] #${loopIter} 轮末检查游戏结束`);
                 gameEnded = true;
             }
         }
         await sleep(0.2);
     }
+    console.log(`[GameLoop] 游戏循环结束, 共 ${loopIter} 轮`);
 }

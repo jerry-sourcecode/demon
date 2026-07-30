@@ -55,7 +55,8 @@
 										class="skill-badge icon"
 										style="font-size: 16px"
 										title="可发动技能"
-										><IconLightningBolt /></span>
+										><IconLightningBolt
+									/></span>
 								</span>
 							</template>
 							<template #header-extra>
@@ -87,6 +88,7 @@
 						<AbilityPopover
 							:markdown="realRoleInfo!.ability"
 							v-if="realRoleInfo"
+							title-suffix="（死亡）"
 							:role-key="props.data.role" />
 						<n-divider />
 						<AbilityPopover
@@ -98,6 +100,7 @@
 					<AbilityPopover
 						v-else-if="calRole"
 						:markdown="calRole!.ability"
+						:title-suffix="isDead ? `（死亡）` : undefined"
 						:role-key="props.data.displayRole!" />
 				</div>
 			</n-popover>
@@ -241,7 +244,7 @@ const realRoleInfo = computed(() => RoleMap[props.data.role]);
 
 const cardStyle = computed(() => {
 	const parts: string[] = [];
-	if (isDead.value) parts.push("grayscale(100%)", "opacity(0.6)");
+	if (isDead.value) parts.push("grayscale(100%)", "opacity(0.9)");
 	if (props.glow === "selectable")
 		parts.push("brightness(1.15)", "drop-shadow(0 0 10px #4fc3f7)");
 	else if (props.glow === "selected")
@@ -353,7 +356,12 @@ const canAffordExecute = computed(() =>
 );
 
 function onRecall() {
-	if (!dataStore.canSpendActionPoints(ACTION_COST.recall)) return;
+	if (!dataStore.canSpendActionPoints(ACTION_COST.recall)) {
+		console.log(
+			`[Player] onRecall 失败: AP不足, AP=${dataStore.actionPoints}, cost=${ACTION_COST.recall}`,
+		);
+		return;
+	}
 	showActions.value = false;
 	const c = props.data;
 	const infoBefore = [...c.info];
@@ -364,15 +372,15 @@ function onRecall() {
 		logSkillResolution(c.id, `在回忆时得知：${newInfo.join("；")}`);
 	// 回忆后揭示身份到 Tab 面板
 	dataStore.addKnownGoodRole(c.displayRole);
+	console.log(
+		`[Player] onRecall: #${c.id}(${c.displayRole}), 回忆后AP=${dataStore.actionPoints}`,
+	);
 	emit("action-done");
 }
 
 /** 技能调动成功后的善后处理 */
 function afterSkillActivate(c: Character) {
 	logSkillActivate(c.id);
-	// 每次成功调动技能消耗 1 点声望
-	dataStore.reputation--;
-	logReputationChange(-1, `#${c.id} 发动技能`);
 }
 
 async function onSkill() {
@@ -382,14 +390,25 @@ async function onSkill() {
 		props.data,
 	);
 	if (result === false) {
+		console.log(
+			`[Player] onSkill 取消: #${props.data.id}(${props.data.displayRole}), 发送action-done`,
+		);
 		// 取消也要 emit action-done 让游戏循环继续
 		emit("action-done");
 		return;
 	}
 	// 白天消耗行动点，黎明/黄昏不消耗
 	const isDay = Time.getPhase(dataStore.time) === Time.Phase.Day;
-	if (isDay && !dataStore.canSpendActionPoints(ACTION_COST.skill)) return;
+	if (isDay && !dataStore.canSpendActionPoints(ACTION_COST.skill)) {
+		console.log(
+			`[Player] onSkill AP不足: #${props.data.id}, AP=${dataStore.actionPoints}, 未发送action-done`,
+		);
+		return;
+	}
 	afterSkillActivate(props.data);
+	console.log(
+		`[Player] onSkill 成功: #${props.data.id}(${props.data.displayRole}), AP=${dataStore.actionPoints}`,
+	);
 	emit("action-done");
 }
 
@@ -401,9 +420,17 @@ function onExecute() {
 		positiveText: "确定",
 		negativeText: "取消",
 		onPositiveClick: () => {
-			if (!dataStore.canSpendActionPoints(ACTION_COST.execute)) return;
+			if (!dataStore.canSpendActionPoints(ACTION_COST.execute)) {
+				console.log(
+					`[Player] onExecute 失败: AP不足, AP=${dataStore.actionPoints}`,
+				);
+				return;
+			}
 			logExecute(props.data.id);
 			props.data.addTag(TagType.executed);
+			console.log(
+				`[Player] onExecute: #${props.data.id}, AP=${dataStore.actionPoints}`,
+			);
 			emit("action-done");
 		},
 	});

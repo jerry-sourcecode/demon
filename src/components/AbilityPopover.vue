@@ -2,7 +2,7 @@
 	<n-card
 		:segmented="{ content: 'soft' }"
 		size="small"
-		:title="titlePrefix + roleDisplay">
+		:title="titlePrefix + roleDisplay + titleSuffix">
 		<ability-md :markdown="`::${faction}::。`" />
 		<ability-md :markdown="props.markdown" />
 	</n-card>
@@ -18,9 +18,11 @@ const props = defineProps<{
 	markdown: string;
 	roleKey: RoleType;
 	titlePrefix?: string;
+	titleSuffix?: string;
 }>();
 
 const titlePrefix = computed(() => props.titlePrefix ?? "");
+const titleSuffix = computed(() => props.titleSuffix ?? "");
 
 const roleDisplay = computed(() => RoleMap[props.roleKey].display);
 const faction = computed(() => RoleMap[props.roleKey].faction);

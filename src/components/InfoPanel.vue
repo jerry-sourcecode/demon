@@ -63,6 +63,7 @@ const entries = computed<InfoEntry[]>(() => {
 		// （死亡之间可能穿插 reputationChange/skillResolution 等伴随事件）
 		if (event.type === "phaseChange" && meta.phase === "黎明") {
 			const deaths: string[] = [];
+			const repChanges: GameEvent[] = [];
 			let j = i + 1;
 			while (j < log.length) {
 				const next = log[j]!;
@@ -75,16 +76,26 @@ const entries = computed<InfoEntry[]>(() => {
 					j++;
 					continue;
 				}
-				// 跳过死亡伴随事件（声望变动、技能结算）
-				if (
-					next.type === "reputationChange" ||
-					next.type === "skillResolution"
-				) {
+				if (next.type === "reputationChange") {
+					repChanges.push(next);
+					j++;
+					continue;
+				}
+				if (next.type === "skillResolution") {
 					j++;
 					continue;
 				}
 				break; // 遇到其他事件终止收集
 			}
+			// 先输出黎明时段切换
+			result.push({
+				id: event.id,
+				type: "phase",
+				timeStr: t,
+				tag: "时段",
+				text: `进入 ${meta.phase}`,
+			});
+			// 再输出死亡汇总
 			if (deaths.length > 0) {
 				result.push({
 					id: event.id,
@@ -93,16 +104,20 @@ const entries = computed<InfoEntry[]>(() => {
 					tag: "死亡",
 					text: `昨天晚上，${deaths.join("、")} 被发现死在了家中`,
 				});
-				i = j - 1;
-				continue;
 			}
-			result.push({
-				id: event.id,
-				type: "phase",
-				timeStr: t,
-				tag: "时段",
-				text: `进入 ${meta.phase}`,
-			});
+			// 然后输出被跳过的声望变动
+			for (const rep of repChanges) {
+				const rm = rep.meta as any;
+				const sign = rm.delta > 0 ? "+" : "";
+				result.push({
+					id: rep.id,
+					type: "reputation",
+					timeStr: formatTime(rep.time),
+					tag: "声望",
+					text: `${sign}${rm.delta}（${rm.reason ?? ""}）→ ${rm.newValue}`,
+				});
+			}
+			i = j - 1;
 			continue;
 		}
 
