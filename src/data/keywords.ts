@@ -124,8 +124,17 @@ export const KEYWORD_DICT: Record<string, KeywordEntry> = {
         display: "每个夜晚*",
         desc: "指除首个夜晚以外的每个夜晚。",
         color: "#524ff7",
-    }
-
+    },
+    disguise: {
+        display: "伪装",
+        desc: "伪装的玩家在::recall::时会显示为其他错误的身份，他们的技能可以释放，但常常是错误或无效的。",
+        color: "#f74f4f",
+    },
+    abnormal: {
+        display: "异常",
+        desc: "异常的玩家在发动技能或回忆时，可能获得错误的信息，或者技能无法生效。异常常常由于::confused::或::disguise::造成。",
+        color: "#f74f4f",
+    },
 };
 
 /** markdown-it 实例（复用，避免重复创建） */

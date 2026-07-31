@@ -171,6 +171,44 @@ function f4HandleNotAwake(c: Character, faction: Faction, countMin: number, zero
     } else if (!doDisguise()) doRandomWrong();
 }
 
+/** 解密大师：猜对时，得知一名真实邪恶玩家及其身份 */
+function cryptoRevealEvil(c: Character): boolean {
+    const dataStore = useDataStore();
+    const evil = randpick(
+        dataStore.charList(),
+        1,
+        e => e.isEvil() && !e.hasTag(TagType.dead) && e.id !== c.id,
+    ).items[0] ?? randpick(
+        dataStore.charList(),
+        1,
+        e => e.isEvil() && !e.hasTag(TagType.dead),
+    ).items[0];
+    if (!evil) return false;
+    c.info.push(`#${evil.id} 是${RoleMap[evil.role].display}。`);
+    logSkillResolution(c.id, `猜对了！得知 #${evil.id} 是::${evil.role}::。`);
+    return true;
+}
+
+/** 解密大师：错误信息（随机一名玩家 + 可能出现的邪恶身份，且保证该玩家不是该身份） */
+function cryptoWrongInfo(c: Character, reason: string): void {
+    const dataStore = useDataStore();
+    const player = randpick(dataStore.charList(), 1, p => p.id !== c.id).items[0];
+    if (!player) {
+        c.info.push('未能获取到有效信息。');
+        return;
+    }
+    const allEvil = allRoleKeys().filter(r =>
+        RoleMap[r].faction === Faction.minion || RoleMap[r].faction === Faction.demon
+    );
+    const pool = (dataStore.possibleEvil.length > 0 ? dataStore.possibleEvil : allEvil)
+        .filter(r => r !== player.role);
+    const role = pool.length > 0
+        ? randpick(pool).items[0]!
+        : (allEvil.find(r => r !== player.role) ?? allEvil[0]!);
+    c.info.push(`#${player.id} 是${RoleMap[role].display}。`);
+    logSkillResolution(c.id, `得知 #${player.id} 是::${role}::（错误信息，${reason}）`);
+}
+
 const roles = {
     unknown: {
         display: '失忆者',
@@ -1395,6 +1433,52 @@ const roles = {
                     source: c.id,
                 });
             }
+        },
+    },
+    Puzzlemaster: {
+        display: '解密大师',
+        faction: Faction.outsider,
+        summery: '“当一个人开始认为某件事只不过是另一件事时，那么他通常都处在错误的边缘。耐心，耐心。不要把“只不过”和“应该”，“是”和“不是”混为一谈。”',
+        ability: `一名::kind::::drunk::，即使你已死亡。每局游戏限一次，你可以猜测谁是那个因你而::drunk::的玩家，如果猜对了，你会得知一名::evil::及其身份，但如果猜错了，你会得知错误的信息。`,
+        abnormal: {
+            overall: "仍会有人醉酒，但若猜测时你::abnormal::，无论是否猜对，都会获得错误的信息。",
+        },
+        onStart(c) {
+            c.limitSkill('skill', 1);
+            const dataStore = useDataStore();
+            const drunk = randpick(
+                dataStore.charList(),
+                1,
+                x => !x.isTrulyEvil() && x.id !== c.id,
+            ).items[0];
+            if (drunk) {
+                _store.set(c.id, drunk.id);
+                drunk.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
+                logSkillResolution(c.id, `#${drunk.id}（::${drunk.role}::）醉酒。`);
+            }
+        },
+        canActivateSkill(c, t) {
+            return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
+        },
+        async onActiveSkill(c) {
+            const emitter = useEmitter();
+            const x = await emitter.emit('select-player', {
+                count: 1,
+                info: '::Puzzlemaster::：猜测谁是那名醉酒的玩家。',
+            });
+            if (!x || x.length < 1) return false;
+            c.useSkill('skill');
+            const obj = x[0]!;
+            const drunkId = _store.get(c.id);
+            const guessedRight = drunkId !== undefined && obj.id === drunkId;
+            const abnormal = !c.isAwake('Puzzlemaster');
+            if (!abnormal && guessedRight) {
+                if (cryptoRevealEvil(c)) return true;
+                cryptoWrongInfo(c, '没有可揭示的邪恶玩家');
+                return true;
+            }
+            cryptoWrongInfo(c, guessedRight ? '猜测正确但神志不清' : '猜错了');
+            return true;
         },
     },
     Sage: {

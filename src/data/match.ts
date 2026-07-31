@@ -20,6 +20,8 @@ export interface MatchStats {
     recallCount: number;
     /** 主动技能发动次数 */
     skillActivateCount: number;
+    /** 白天发动的技能次数（仅白天消耗行动力，黎明/黄昏/夜晚免费） */
+    skillDayCount?: number;
     finalReputation: number;
     evilExecuted: number;
     goodAlive: number;

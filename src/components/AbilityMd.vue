@@ -114,4 +114,19 @@ onUnmounted(() => kwApps.forEach((app) => app.unmount()));
 .popover {
 	z-index: 100;
 }
+
+/* markdown-it 渲染的列表在全局 `* { padding: 0 }` 重置下会丢失圆点，这里恢复 */
+.ability-content :deep(ul) {
+	list-style: disc;
+	padding-left: 1.4em;
+}
+
+.ability-content :deep(ol) {
+	list-style: decimal;
+	padding-left: 1.4em;
+}
+
+.ability-content :deep(li) {
+	margin: 2px 0;
+}
 </style>

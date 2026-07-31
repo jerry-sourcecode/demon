@@ -524,6 +524,7 @@ const ratingResult = computed<RatingResult>(() => {
 			executeCount,
 			recallCount,
 			skillActivateCount,
+			skillDayCount,
 			goodAlive,
 			finalReputation,
 		},
@@ -537,7 +538,9 @@ const ratingResult = computed<RatingResult>(() => {
 	const accScore = executeCount > 0 ? (accuracy / 100) * 15 : 0;
 	const effScore = Math.max(0, 10 - (days - 1) * 2);
 	const totalAP = maxAP * days;
-	const usedAP = recallCount * 2 + executeCount * 3 + skillActivateCount * 2;
+	// 仅白天发动的技能消耗行动力（旧记录无 skillDayCount 时回退为全部技能）
+	const skillApCount = skillDayCount ?? skillActivateCount;
+	const usedAP = recallCount * 2 + executeCount * 3 + skillApCount * 2;
 	const apUtilRate = totalAP > 0 ? Math.min(1, usedAP / totalAP) : 1;
 	const goodSurvivalRate = goodTotal > 0 ? goodAlive / goodTotal : 1;
 	const repRemainRate =

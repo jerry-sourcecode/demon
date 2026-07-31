@@ -30,6 +30,12 @@
 			>
 			<n-button
 				size="large"
+				@click="showEncyclopedia = true"
+				style="width: 100%"
+				>百科</n-button
+			>
+			<n-button
+				size="large"
 				@click="showMatchHistory = true"
 				style="width: 100%"
 				>对决记录</n-button
@@ -183,6 +189,9 @@
 		<!-- 对决记录弹窗 -->
 		<MatchHistoryModal v-model:show="showMatchHistory" />
 
+		<!-- 角色百科弹窗 -->
+		<RoleEncyclopedia v-model:show="showEncyclopedia" />
+
 		<!-- 导入复盘结果弹窗 -->
 		<GameOverModal
 			v-if="importedRecord"
@@ -259,12 +268,14 @@ import { DEFAULT_MATCH_CONFIG } from "@/data/match";
 import MatchHistoryModal from "./MatchHistoryModal.vue";
 import GameOverModal from "./GameOverModal.vue";
 import TutorialGuide from "./TutorialGuide.vue";
+import RoleEncyclopedia from "./RoleEncyclopedia.vue";
 import { MENU_STEPS } from "@/data/tutorial";
 
 const emit = defineEmits<{ start: [] }>();
 const showImport = ref(false);
 const showConfig = ref(false);
 const configTab = ref("game");
+const showEncyclopedia = ref(false);
 const showMatchHistory = ref(false);
 const showImportResult = ref(false);
 const importedRecord = ref<MatchRecord | null>(null);

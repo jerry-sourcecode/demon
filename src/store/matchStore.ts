@@ -80,6 +80,10 @@ export const useMatchStore = defineStore('match', () => {
         const executeCount = events.filter(e => e.type === 'execute').length;
         const recallCount = events.filter(e => e.type === 'recall').length;
         const skillActivateCount = events.filter(e => e.type === 'skillActivate').length;
+        // 仅白天发动的技能消耗行动力（黎明/黄昏/夜晚免费），用于精确统计 AP 使用量
+        const skillDayCount = events.filter(
+            e => e.type === 'skillActivate' && Time.getPhase(e.time) === Time.Phase.Day,
+        ).length;
         const endEvent = events.find(e => e.type === 'gameEnd');
         const finalReputation = (endEvent?.meta as any)?.reputation ?? 0;
 
@@ -111,6 +115,7 @@ export const useMatchStore = defineStore('match', () => {
             executeCount,
             recallCount,
             skillActivateCount,
+            skillDayCount,
             finalReputation,
             evilExecuted,
             goodAlive,
