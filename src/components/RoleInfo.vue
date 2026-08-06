@@ -1,5 +1,5 @@
 <template>
-	<p v-if="roleInfo.summery" class="txt">
+	<p v-if="roleInfo.summery" class="txt" style="margin-bottom: 10px">
 		<em>{{ roleInfo.summery }}</em>
 	</p>
 	<ability-md class="txt" :markdown="`::${roleInfo.faction}::。`" />

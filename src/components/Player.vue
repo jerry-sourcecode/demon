@@ -64,6 +64,7 @@
 							</template>
 							<div
 								class="info-box"
+								style="margin-bottom: 10px"
 								v-if="props.data.info.length !== 0">
 								<div
 									v-for="value in props.data.info"
