@@ -104,6 +104,14 @@ const entries = computed<InfoEntry[]>(() => {
 					tag: "死亡",
 					text: `昨天晚上，${deaths.join("、")} 被发现死在了家中`,
 				});
+			} else {
+				result.push({
+					id: event.id,
+					type: "death",
+					timeStr: t,
+					tag: "死亡",
+					text: `昨天晚上是平安夜`,
+				});
 			}
 			// 然后输出被跳过的声望变动
 			for (const rep of repChanges) {

@@ -192,8 +192,8 @@ export async function start(matchConfig: MatchConfig) {
 
     // ── 3. 发牌（按阵营随机抽取 + 打乱顺序） ──
     const player: RoleType[] = [
-        ...pickRoles(Faction.villager, matchConfig.villager),
-        ...pickRoles(Faction.outsider, matchConfig.outsider),
+        ...pickRoles(Faction.villager, matchConfig.villager), 'Knight',
+        ...pickRoles(Faction.outsider, matchConfig.outsider), "SweetHeart",
         ...pickRoles(Faction.minion, matchConfig.minion),
         ...pickRoles(Faction.demon, matchConfig.demon),
     ];

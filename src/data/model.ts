@@ -77,7 +77,7 @@ export class Character {
         if (this.hasTag(TagType.confused)) return false;
         if (this.hasTag(TagType.disguise)) {
             const dis = this.getTag(TagType.disguise)[0];
-            if (dis && dis.meta === role) return false;
+            if (dis && dis.meta === role && dis.meta !== 'TwoFaced') return false;
         }
         return true;
     }
