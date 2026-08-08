@@ -327,11 +327,11 @@ export const villagerRoles = {
                 ls.push(randpick(minion).items[0]!);
                 has.push('::minion::');
             }
-            ls = ls.sort();
             if (!c.isAwake('Bishop')) {
                 const allIds = [...dataStore.chars.keys()];
                 ls = (randpick(allIds, has.length).items).sort();
             }
+            ls = ls.sort();
             const sls: string[] = []
             ls.forEach((v) => sls.push(`#${v}`));
             c.info.push(`在${sls.join('、')}中，存在${has.join('、')}各一个。`)
@@ -798,7 +798,7 @@ export const villagerRoles = {
             overall: "你仍需要选择玩家，但技能不会生效。",
         },
         nightActionPriority() {
-            return 7;
+            return 8;
         },
         async onNightSkill(c, t) {
             if (Time.getDay(t) === 1 || !c.hasRecalled()) return;
@@ -833,7 +833,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你仍需要选择玩家，但技能不会生效。"
         }, nightActionPriority() {
-            return 7;
+            return 8;
         },
         async onNightSkill(c, t) {
             if (Time.getDay(t) === 1 || !c.hasRecalled()) return;
