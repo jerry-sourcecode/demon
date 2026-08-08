@@ -162,7 +162,7 @@ export const villagerRoles = {
         display: "农夫",
         faction: Faction.villager,
         summery: "“即使那些高高在上的人也需要吃东西。没有了我们，城市就会挨饿。”",
-        ability: `::recall::时，如果可能，1名失忆的::villager::会变成新的农夫，并得知原来的身份。`,
+        ability: `::recall::时，如果可能，会有1名失忆的::villager::会变成新的农夫，并得知原来的身份。`,
         abnormal: {
             overall: "得知正确的原来的身份，不会有人变成农夫。"
         },
@@ -393,7 +393,7 @@ export const villagerRoles = {
 
         ::Recluse::不会被视作::outsider::。`,
         abnormal: {
-            overall: "你可能会获得错误线索。"
+            overall: "你有可能会获得错误线索。"
         },
         onStart(c) {
             c.limitSkill('skill', 2);
@@ -584,7 +584,7 @@ export const villagerRoles = {
         summery: '“受死吧。”',
         ability: '每局游戏限一次，你可以在白天时公开选择一名玩家：如果他是::evil::，他死亡。',
         abnormal: {
-            overall: "你的技能不会生效。",
+            overall: "该玩家不会死亡，即使他是::evil::。",
         },
         onStart(c) {
             c.limitSkill('skill', 1);
@@ -615,7 +615,7 @@ export const villagerRoles = {
         summery: '“天啊！多么美妙的作品！我的作品……用你们的话怎么说来着……对，璀璨夺目！栩栩如生！没错！”',
         ability: '每局游戏限一次，在白天时，你可以私下询问说书人一个是非问题，你会得知该问题的答案。',
         abnormal: {
-            overall: '说书人可能给出错误的答案。',
+            overall: '说书人必定会给出错误的答案。',
         },
         requiresAI: true,
         onStart(c) {
@@ -694,7 +694,7 @@ export const villagerRoles = {
         summery: '“这是这条河流里我最喜欢的一截儿……看看阳光是如何让一道彩虹横跨修道院和集市的？这是能让鱼儿长得肥美的最好的地方。我一天天变老，它们也一天天长大。”',
         ability: '每局游戏限一次，在白天时，你可以让说书人给你一些能帮助你的阵营获胜的建议。',
         abnormal: {
-            overall: '说书人可能会给出误导性的建议。',
+            overall: '说书人必定会给出误导性的建议。',
         },
         requiresAI: true,
         onStart(c) {
@@ -922,7 +922,7 @@ export const villagerRoles = {
         faction: Faction.villager,
         ability: `::recall::后的首夜，你会得知两名玩家，其中一名是某个特定的::outsider::。（如果场上没有::outsider::，你会得知没有::outsider::。）`,
         abnormal: {
-            overall: "你会得知错误的玩家或角色。若场上**不可能**有::outsider::，你会得知没有::outsider::，即使你的技能异常。",
+            overall: "你必定会得知错误的玩家或角色。若场上**不可能**有::outsider::，你会得知没有::outsider::，即使你的技能异常。",
         },
         onStart(c) { c.limitSkill('skill', 1); },
         nightActionPriority() { return 5; },
@@ -958,7 +958,7 @@ export const villagerRoles = {
         faction: Faction.villager,
         ability: `::recall::后的首夜，你会得知两名玩家，其中一名是某个特定的::minion::。（如果场上没有::minion::，你会得知没有::minion::。）`,
         abnormal: {
-            overall: "你会得知错误的玩家或角色。若场上**不可能**有::minion::，你会得知没有::minion::，即使你的技能异常。",
+            overall: "你必定会得知错误的玩家或角色。若场上**不可能**有::minion::，你会得知没有::minion::，即使你的技能异常。",
         },
         onStart(c) { c.limitSkill('skill', 1); },
         nightActionPriority() { return 4; },
@@ -1011,7 +1011,7 @@ export const villagerRoles = {
         faction: Faction.villager,
         ability: `::recall::后的首夜，你会得知有多少对::evil::邻座。`,
         abnormal: {
-            overall: "你会得知错误的数目。",
+            overall: "你必定会得知错误的数目。",
         },
         onStart(c) {
             c.limitSkill('skill', 1);
@@ -1055,7 +1055,7 @@ export const villagerRoles = {
         summery: '"脉浮而阳气不足，气不收敛，发散在外。"',
         ability: `每个夜晚，你要选择除你以外的一名玩家：你会得知一个与他能力相关的词语。`,
         abnormal: {
-            overall: "你会得知一个与该玩家能力无关的随机词语。",
+            overall: "你必定会得知一个与该玩家能力无关的随机词语。",
         },
         requiresAI: true,
         nightActionPriority() {
