@@ -352,6 +352,11 @@ if (dataStore.time !== Time.NOT_STARTED) {
 
 onUnmounted(() => {
 	emitter.off("game-start");
+	emitter.off("game-end");
+	emitter.off("wait-for-action");
+	emitter.off("select-player");
+	emitter.off("show-message");
+	emitter.off("ask-question");
 });
 
 // ── 游戏结束 ──
@@ -360,6 +365,7 @@ const showGameOverModal = ref(false);
 const isWin = ref(false);
 const gameOverRecord = ref<MatchRecord | null>(null);
 
+emitter.off("game-end");
 emitter.on("game-end", (win) => {
 	dataStore.gameOver = true;
 	isWin.value = win;
@@ -407,6 +413,7 @@ function startUserAction() {
 	);
 }
 
+emitter.off("wait-for-action");
 emitter.on("wait-for-action", () => {
 	startUserAction();
 	return new Promise((res) => {
@@ -458,6 +465,7 @@ const selectRequired = ref(false);
 const selected = ref(new UniqueQueue<number>());
 let selectResolve: ((cs: Character[] | null) => void) | null = null;
 
+emitter.off("select-player");
 emitter.on("select-player", (options) => {
 	const {
 		filter = () => true,
@@ -523,6 +531,7 @@ function isSelected(id: number): boolean {
 
 const message = useMessage();
 
+emitter.off("show-message");
 emitter.on("show-message", (options) => {
 	if (options.type === "warning") {
 		message.warning(options.content);
@@ -547,6 +556,7 @@ watch(showQuestionDialog, (val) => {
 	}
 });
 
+emitter.off("ask-question");
 emitter.on("ask-question", (options) => {
 	questionInfo.value = options?.info ?? "";
 	return new Promise<string | null>((resolve) => {

@@ -42,7 +42,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你的技能不会生效，且会获得错误的信息。",
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
@@ -196,7 +196,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "得知随机一位::awake::的玩家与你的距离。"
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 2);
         },
         canActivateSkill(c, t) {
@@ -254,7 +254,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "无事发生。"
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
@@ -344,7 +344,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "两个角色均不属于该玩家。"
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         onTimeChange(c, t) {
@@ -395,7 +395,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你有可能会获得错误线索。"
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 2);
         },
         canActivateSkill(c, t) {
@@ -514,7 +514,8 @@ export const villagerRoles = {
             const x = randpick(dataStore.charList(), 1, (x) => !x.isEvil()).items[0];
             x?.addTag(TagType.nemesis, { source: c.id });
             logSkillResolution(c.id, `#${x?.id} ::${x?.role}:: 是占卜师的宿敌。`)
-
+        },
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
@@ -586,7 +587,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "该玩家不会死亡，即使他是::evil::。",
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
@@ -618,7 +619,7 @@ export const villagerRoles = {
             overall: '说书人必定会给出错误的答案。',
         },
         requiresAI: true,
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
@@ -697,7 +698,7 @@ export const villagerRoles = {
             overall: '说书人必定会给出误导性的建议。',
         },
         requiresAI: true,
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
@@ -707,7 +708,7 @@ export const villagerRoles = {
             const emitter = useEmitter();
             const dataStore = useDataStore();
 
-            const premise = buildFishermanPremise();
+            const premise = buildFishermanPremise(c.isAwake('Fisherman'));
 
             const aiConfig = dataStore.getAiConfig();
             if (!aiConfig) {
@@ -896,7 +897,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你会必定得知错误的玩家或角色。",
         },
-        onStart(c) { c.limitSkill('skill', 1); },
+        onRecall(c) { c.limitSkill('skill', 1); },
         nightActionPriority() { return 6; },
         onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
@@ -924,7 +925,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你必定会得知错误的玩家或角色。若场上**不可能**有::outsider::，你会得知没有::outsider::，即使你的技能异常。",
         },
-        onStart(c) { c.limitSkill('skill', 1); },
+        onRecall(c) { c.limitSkill('skill', 1); },
         nightActionPriority() { return 5; },
         onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
@@ -960,7 +961,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你必定会得知错误的玩家或角色。若场上**不可能**有::minion::，你会得知没有::minion::，即使你的技能异常。",
         },
-        onStart(c) { c.limitSkill('skill', 1); },
+        onRecall(c) { c.limitSkill('skill', 1); },
         nightActionPriority() { return 4; },
         onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
@@ -1013,7 +1014,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你必定会得知错误的数目。",
         },
-        onStart(c) {
+        onRecall(c) {
             c.limitSkill('skill', 1);
         },
         nightActionPriority() {
