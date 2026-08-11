@@ -34,6 +34,8 @@ interface RecallMeta {
 
 interface ExecuteMeta {
     target: number;
+    /** 执行处决时目标是否已死亡（用于区分“再次处决”） */
+    alreadyDead?: boolean;
 }
 
 interface DeathMeta {
@@ -167,8 +169,8 @@ export function logRecall(target: number): void {
     addLog('recall', target, { target });
 }
 
-export function logExecute(target: number): void {
-    addLog('execute', 0, { target });
+export function logExecute(target: number, alreadyDead: boolean = false): void {
+    addLog('execute', 0, { target, alreadyDead });
 }
 
 export function logDeath(subject: number, cause: DeadReasonType): void {

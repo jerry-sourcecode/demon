@@ -130,6 +130,7 @@ export const useMatchStore = defineStore('match', () => {
             const disguiseTag = c.getTag(TagType.disguise)[0];
             finalChars[id] = {
                 role: c.role,
+                alignment: c.alignment,
                 dead: c.hasTag(TagType.dead),
                 deathType: (deadTag?.meta as any)?.type,
                 disguiseRole: disguiseTag?.meta as RoleType | undefined,

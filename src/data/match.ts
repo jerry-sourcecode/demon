@@ -1,5 +1,5 @@
 import type { GameEvent } from "./gameLog";
-import type { RoleType } from "./model";
+import type { RoleType, Alignment } from "./model";
 
 /** 自定义对决配置 */
 export interface MatchConfig {
@@ -32,6 +32,8 @@ export interface MatchStats {
 /** 最终角色状态（用于导入复盘时还原死亡/伪装） */
 export interface FinalCharState {
     role: RoleType;
+    /** 游戏结束时的阵营（善良/邪恶） */
+    alignment: Alignment;
     dead: boolean;
     deathType?: string;
     disguiseRole?: RoleType;

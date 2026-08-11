@@ -86,9 +86,18 @@
 				</template>
 				<div>
 					<template v-if="isDead && hasDisguiseTag">
+						<!-- 死亡的邪恶玩家：不展示具体身份，只显示「邪恶玩家」 -->
 						<AbilityPopover
-							:markdown="realRoleInfo!.ability"
-							v-if="realRoleInfo"
+							v-if="isDeadEvil"
+							markdown="该玩家是邪恶玩家。其具体身份不会在死亡后展示。"
+							role-key="unknown"
+							role-display-override="邪恶玩家"
+							faction-keyword="evil"
+							title-suffix="（死亡）" />
+						<!-- 死亡的善良伪装者：展示真实身份 -->
+						<AbilityPopover
+							v-else-if="realRoleInfo"
+							:markdown="realRoleInfo.ability"
 							title-suffix="（死亡）"
 							:role-key="props.data.role" />
 						<n-divider />
@@ -98,6 +107,14 @@
 							:role-key="props.data.displayRole!"
 							title-prefix="（伪装）" />
 					</template>
+					<!-- 死亡的邪恶玩家（无伪装）：只显示「邪恶玩家」，不展示具体身份 -->
+					<AbilityPopover
+						v-else-if="isDeadEvil"
+						markdown="该玩家是邪恶玩家。其具体身份不会在死亡后展示。"
+						role-key="unknown"
+						role-display-override="邪恶玩家"
+						faction-keyword="evil"
+						title-suffix="（死亡）" />
 					<AbilityPopover
 						v-else-if="calRole"
 						:markdown="calRole!.ability"
@@ -170,11 +187,12 @@
 		:disguise-role="
 			isDead && hasDisguiseTag ? props.data.displayRole! : undefined
 		"
+		:placeholder-evil="detailPlaceholderEvil"
 		v-model="showDetailModal" />
 </template>
 
 <script setup lang="ts">
-import { Character, RoleMap, Faction } from "@/data/model";
+import { Character, RoleMap, Faction, type RoleType } from "@/data/model";
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { IconSkull, IconLightningBolt } from "@iconify-prerendered/vue-mdi";
 import {
@@ -224,10 +242,16 @@ const calRole = computed(() => {
 const calRoleName = computed(() => {
 	if (props.data.displayRole === null) return "未知";
 	const displayName = RoleMap[props.data.displayRole].display;
+	// 死亡的邪恶玩家（按阵营判断），真实身份只显示「邪恶玩家」
+	const realLabel = isDeadEvil.value
+		? "邪恶玩家"
+		: RoleMap[props.data.role].display;
 	// 死亡 + 伪装 → 显示「真实身份（伪装身份）」
 	if (isDead.value && props.data.hasTag(TagType.disguise)) {
-		return `${RoleMap[props.data.role].display}（${displayName}）`;
+		return `${realLabel}（${displayName}）`;
 	}
+	// 死亡的邪恶玩家：只显示「邪恶玩家」
+	if (isDeadEvil.value) return realLabel;
 	return displayName;
 });
 
@@ -238,10 +262,17 @@ const calColor = computed(() => {
 });
 
 const isDead = computed(() => props.data.hasTag(TagType.dead));
+// 死亡的邪恶玩家（按阵营判断）
+const isDeadEvil = computed(() => isDead.value && props.data.isTrulyEvil());
 
 const hasDisguiseTag = computed(() => props.data.hasTag(TagType.disguise));
 
 const realRoleInfo = computed(() => RoleMap[props.data.role]);
+
+// 死亡后按阵营判断，只显示「邪恶玩家」，不展示具体品种（右键 Detail 用）
+const detailPlaceholderEvil = computed(
+	() => isDead.value && props.data.isTrulyEvil(),
+);
 
 const cardStyle = computed(() => {
 	const parts: string[] = [];
@@ -339,11 +370,24 @@ const canShowRecall = computed(
 const canAffordRecall = computed(() => dataStore.canAfford(ACTION_COST.recall));
 
 // 技能
+const skillRoles = computed<RoleType[]>(() => {
+	const roles = new Set<RoleType>();
+	const dr = props.data.displayRole;
+	if (dr && dr !== "unknown") roles.add(dr);
+	// 获得的能力
+	for (const tg of props.data.getTag(TagType.gained)) {
+		for (const r of tg.meta as RoleType[]) roles.add(r);
+	}
+	return [...roles];
+});
 const canShowSkill = computed(() => {
 	if (dataStore.gameOver) return false;
 	if (props.data.hasTag(TagType.dead)) return false;
-	const role = RoleMap[props.data.displayRole];
-	return runFn(role?.canActivateSkill, props.data, dataStore.time) ?? false;
+	return skillRoles.value.some(
+		(r) =>
+			runFn(RoleMap[r]?.canActivateSkill, props.data, dataStore.time) ??
+			false,
+	);
 });
 const needAPForSkill = computed(() => isDay.value);
 const canAffordSkill = computed(
@@ -386,13 +430,20 @@ function afterSkillActivate(c: Character) {
 
 async function onSkill() {
 	showActions.value = false;
-	// 先执行技能逻辑，返回 false 表示取消/失败
-	const result = await RoleMap[props.data.displayRole]?.onActiveSkill?.(
-		props.data,
+	// 找到第一个可发动的技能角色（本体/伪装优先，其次获得的能力）
+	const activatable = skillRoles.value.filter(
+		(r) =>
+			runFn(RoleMap[r]?.canActivateSkill, props.data, dataStore.time) ??
+			false,
 	);
+	const role = activatable[0];
+	// 先执行技能逻辑，返回 false 表示取消/失败
+	const result = role
+		? await RoleMap[role]?.onActiveSkill?.(props.data)
+		: undefined;
 	if (result === false) {
 		console.log(
-			`[Player] onSkill 取消: #${props.data.id}(${props.data.displayRole}), 发送action-done`,
+			`[Player] onSkill 取消: #${props.data.id}(${role ?? props.data.displayRole}), 发送action-done`,
 		);
 		// 取消也要 emit action-done 让游戏循环继续
 		emit("action-done");
@@ -427,7 +478,7 @@ function onExecute() {
 				);
 				return;
 			}
-			logExecute(props.data.id);
+			logExecute(props.data.id, props.data.hasTag(TagType.dead));
 			props.data.addTag(TagType.executed);
 			console.log(
 				`[Player] onExecute: #${props.data.id}, AP=${dataStore.actionPoints}`,

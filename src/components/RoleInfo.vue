@@ -2,7 +2,9 @@
 	<p v-if="roleInfo.summery" class="txt" style="margin-bottom: 10px">
 		<em>{{ roleInfo.summery }}</em>
 	</p>
-	<ability-md class="txt" :markdown="`::${roleInfo.faction}::。`" />
+	<ability-md
+		class="txt"
+		:markdown="`::${factionKeyword ?? roleInfo.faction}::。`" />
 	<n-divider title-placement="left">我的能力</n-divider>
 	<ability-md
 		class="txt"
@@ -32,6 +34,8 @@ import type { IRole } from "@/data/model";
 
 defineProps<{
 	roleInfo: IRole;
+	/** 阵营关键词覆盖（默认 roleInfo.faction），如死亡后只显示 ::evil:: */
+	factionKeyword?: string;
 }>();
 </script>
 

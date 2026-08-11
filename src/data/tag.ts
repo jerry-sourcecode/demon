@@ -1,6 +1,6 @@
 import { randint, runFn } from "@/utils/utils";
 import { Time } from "../utils/time";
-import { RoleMap, type Character, type DeadReasonType } from "./model";
+import { RoleMap, type Character, type DeadReasonType, type RoleType } from "./model";
 import { useDataStore } from "@/store/value";
 import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution, logConfusedChange } from "./gameLog";
 
@@ -13,19 +13,16 @@ export const TagType = {
     confused: "confused",
     /** 伪装 */
     disguise: "disguise",
-    /** 处决免疫（魔鬼代言人） */
-    executionImmune: "executionImmune",
-    /** 可能处决免疫（和平主义者） */
-    pacifist: "pacifist",
+    /** 获得的能力（亡骨魔保留爪牙 / 双面人获得镇民能力），meta 为能力角色数组 */
+    gained: "gained",
     farmer: "farmer",
     recall: "recall",
     grandson: "grandson",
     executed: "executed",
-    nemesis: "nemesis",
-    /** 旅店老板保护（当夜免疫死亡） */
-    protect: "protect",
-    /** 亡骨魔保留（死亡爪牙仍参与夜间行动） */
-    retained: "retained"
+    /** 击杀时不优先的目标（痢蛭宿主 / 狐媚娘魅惑目标，按外来者同级处理） */
+    unfavored: "unfavored",
+    /** 保护（处决免疫 / 和平主义者 / 夜间守护），meta 为死因判定回调 */
+    protect: "protect"
 } as const;
 
 export type TagType = typeof TagType[keyof typeof TagType];
@@ -38,6 +35,61 @@ export interface ITag {
     source?: number;
     /** 额外信息（可选） */
     meta?: unknown;
+}
+
+// ── 保护判定（处决免疫 / 和平主义者 / 夜间守护 合并为 protect） ──
+
+/** 保护回调：传入死因，返回是否保护 */
+export type ProtectFn = (cause: DeadReasonType) => boolean;
+
+/** 保护规则的可序列化描述（用于存档重建回调） */
+export interface ProtectDesc {
+    kind: 'dayExecute' | 'pacifist' | 'nightGuard';
+    day?: number;
+    source?: number;
+}
+
+/** 保护规则工厂：根据可序列化描述生成回调 */
+const PROTECT_FACTORIES: Record<ProtectDesc['kind'], (d: ProtectDesc) => ProtectFn> = {
+    // 处决免疫（魔鬼代言人）：当天处决不死亡
+    dayExecute: (d) => (cause) =>
+        cause === 'execute' && Time.getDay(useDataStore().time) === d.day,
+    // 和平主义者：处决有 60% 概率不死亡（施法者存活且清醒）
+    pacifist: (d) => (cause) => {
+        if (cause !== 'execute') return false;
+        const p = useDataStore().chars.get(d.source!);
+        if (!p || p.hasTag(TagType.dead) || !p.isAwake('Pacifist')) return false;
+        return randint(1, 10) <= 6;
+    },
+    // 夜间守护（士兵/武僧/旅店老板）：非处决死因不死亡
+    nightGuard: () => (cause) => cause !== 'execute',
+};
+
+/** 创建保护回调（附带可序列化信息，便于存档重建） */
+export function makeProtect(desc: ProtectDesc): ProtectFn {
+    const fn = PROTECT_FACTORIES[desc.kind](desc);
+    (fn as { __desc?: ProtectDesc }).__desc = desc;
+    return fn;
+}
+
+/** 序列化保护回调 → 可序列化描述 */
+export function serializeProtectMeta(fn: ProtectFn): ProtectDesc | null {
+    return (fn as { __desc?: ProtectDesc }).__desc ?? null;
+}
+
+/** 反序列化保护描述 → 回调（附带可序列化信息，支持再次存档） */
+export function restoreProtectMeta(desc: ProtectDesc): ProtectFn {
+    const fn = PROTECT_FACTORIES[desc.kind]?.(desc) ?? (() => false);
+    (fn as { __desc?: ProtectDesc }).__desc = desc;
+    return fn;
+}
+
+/** 是否被保护：遍历 protect tag，调用其回调判定指定死因 */
+export function isProtected(c: Character, cause: DeadReasonType): boolean {
+    return c.getTag(TagType.protect).some(t => {
+        const fn = t.meta as unknown as ProtectFn;
+        return typeof fn === 'function' && fn(cause);
+    });
 }
 
 // ── Tag 交互规则 ──
@@ -56,10 +108,11 @@ export interface TagRule {
 /** Tag 间通用交互规则 */
 export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     [TagType.dying]: {
-        beforeAdd(c) {
+        beforeAdd(c, tag) {
             if (c.hasTag(TagType.dead)) return false;
             if (c.hasTag(TagType.dying)) return false;
-            if (c.hasTag(TagType.protect)) {
+            const cause = (tag.meta as { type?: DeadReasonType } | undefined)?.type ?? 'night';
+            if (isProtected(c, cause)) {
                 logSkillResolution(c.id, `因为技能没有死亡。`)
                 return false
             };
@@ -122,19 +175,10 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     },
     [TagType.executed]: {
         beforeAdd(c) {
-            const dataStore = useDataStore();
             if (c.hasTag(TagType.dead)) return false;
-            for (const tg of c.getTag(TagType.pacifist)) {
-                const c = dataStore.chars.get(tg.source!)!;
-                if (c.isAwake('Pacifist') && !c.hasTag('dead') && randint(1, 10) <= 6) {
-                    logSkillResolution(c.id, `被处决成功但没有死亡（::Pacifist::技能生效）。`)
-                    return false;
-                }
-            }
-            const now = useDataStore().time;
-            const currentDay = Time.getDay(now);
-            if (c.getTag(TagType.executionImmune).some(t => t.meta?.day === currentDay)) {
-                logSkillResolution(c.id, `被处决成功但没有死亡。`)
+            // 统一保护判定：处决死因（处决免疫 / 和平主义者）
+            if (isProtected(c, 'execute')) {
+                logSkillResolution(c.id, `被处决成功但没有死亡（受到保护）。`)
                 return false;
             }
             // 调用角色的 onExecuted 钩子（如骑士免疫、圣徒结束游戏）
@@ -152,10 +196,24 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     [TagType.recall]: {
         afterAdd(c) {
             c.displayRole = c.getTag(TagType.disguise)[0]?.meta ?? c.role;
+            // 去重：双面人同时拥有 disguise 与 gained（同一角色）时，onRecall 只应触发一次
+            const invoked = new Set<RoleType>([c.role]);
             runFn(RoleMap[c.role]!.onRecall, c);
             if (c.hasTag(TagType.disguise)) {
                 const dis_role = c.getTag(TagType.disguise)[0]!.meta;
-                runFn(RoleMap[dis_role].onRecall, c);
+                if (!invoked.has(dis_role)) {
+                    invoked.add(dis_role);
+                    runFn(RoleMap[dis_role].onRecall, c);
+                }
+            }
+            // 获得的能力也触发 onRecall（如双面人获得的镇民技能）
+            for (const tg of c.getTag(TagType.gained)) {
+                for (const r of tg.meta as RoleType[]) {
+                    if (!invoked.has(r)) {
+                        invoked.add(r);
+                        runFn(RoleMap[r]?.onRecall, c);
+                    }
+                }
             }
         },
     },

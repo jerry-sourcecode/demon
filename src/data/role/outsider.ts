@@ -10,7 +10,7 @@ import { logSkillResolution, logGameEnd, logSkillActivate, logReputationChange }
 import {
     Faction,
     type IRole,
-    _store,
+    playerData,
     cryptoRevealEvil,
     cryptoWrongInfo,
     getRoleKeys,
@@ -106,23 +106,26 @@ export const outsiderRoles = {
             const inPlayVillagers = getFactionChars(Faction.villager);
             if (inPlayVillagers.length > 0) {
                 const target = randpick(inPlayVillagers).items[0]!;
-                _store.set(c.id, target.id);
+                playerData.set(c.id, target.id);
+                // 伪装成该镇民（游戏面板上显示），并获得其能力
+                c.addTag(TagType.gained, { meta: [target.role] });
                 c.addTag(TagType.disguise, { meta: target.role });
-                logSkillResolution(c.id, `认为自己是::${target.role}::（#${target.id}），并获得该能力。`);
+                logSkillResolution(c.id, `认为自己是::${target.role}::（#${target.id}），伪装成该镇民并获得其能力。`);
             } else {
-                // 没有镇民在场，随机选一个不在场的镇民
+                // 没有镇民在场：伪装成一个不在场的镇民，但无法获得能力
                 const absent = getRoleKeys(Faction.villager, { absent: true });
                 const allVillagers = getRoleKeys(Faction.villager);
                 const believed = absent.length > 0 ? randpick(absent).items[0]! : allVillagers[0]!;
+                c.addTag(TagType.gained, { meta: [] });
                 c.addTag(TagType.disguise, { meta: believed });
-                logSkillResolution(c.id, `没有镇民在场，认为自己是一个::${believed}::。`);
+                logSkillResolution(c.id, `没有镇民在场，伪装成一个不在场的::${believed}::。`);
             }
         },
         nightActionPriority() {
             return 10;
         },
         onNightSkill(c, t) {
-            const targetId = _store.get(c.id);
+            const targetId = playerData.get(c.id);
             if (targetId === undefined || targetId === 0) return;
 
             const dataStore = useDataStore();
@@ -148,7 +151,7 @@ export const outsiderRoles = {
             overall: "仍会有人::drunk::，但若猜测时你::abnormal::，无论是否猜对，都会获得错误的信息。",
         },
         onStart(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
             const dataStore = useDataStore();
             const drunk = randpick(
                 dataStore.charList(),
@@ -156,7 +159,7 @@ export const outsiderRoles = {
                 x => !x.isTrulyEvil() && x.id !== c.id,
             ).items[0];
             if (drunk) {
-                _store.set(c.id, drunk.id);
+                playerData.set(c.id, drunk.id);
                 drunk.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
                 logSkillResolution(c.id, `#${drunk.id}（::${drunk.role}::）醉酒。`);
             }
@@ -173,7 +176,7 @@ export const outsiderRoles = {
             if (!x || x.length < 1) return false;
             c.useSkill('skill');
             const obj = x[0]!;
-            const drunkId = _store.get(c.id);
+            const drunkId = playerData.get(c.id);
             const guessedRight = drunkId !== undefined && obj.id === drunkId;
             const abnormal = !c.isAwake('Puzzlemaster');
             if (!abnormal && guessedRight) {

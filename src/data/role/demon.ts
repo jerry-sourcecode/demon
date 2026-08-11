@@ -6,7 +6,7 @@ import { TagType } from "../tag";
 import { useDataStore } from "../../store/value";
 import { randpick } from "@/utils/utils";
 import { logSkillResolution } from "../gameLog";
-import { Faction, type IRole, _store, pickGood } from "./model";
+import { Faction, type IRole, playerData, pickGood } from "./model";
 
 export const demonRoles = {
     Imp: {
@@ -64,7 +64,7 @@ export const demonRoles = {
             overall: "你的技能不会生效，但此前被::poisoned::的玩家仍会死亡并恢复健康。",
         },
         onStart(c) {
-            _store.set(c.id, 0);
+            playerData.set(c.id, 0);
         },
         nightActionPriority() {
             return 1;
@@ -73,7 +73,7 @@ export const demonRoles = {
             const dataStore = useDataStore();
 
             const day = Time.getDay(t);
-            const prevId = _store.get(c.id);
+            const prevId = playerData.get(c.id);
 
             // 上个被下毒的目标死亡并恢复
             if (prevId && prevId !== 0) {
@@ -87,7 +87,7 @@ export const demonRoles = {
                         meta: { type: 'demon' },
                     });
                 }
-                _store.set(c.id, 0);
+                playerData.set(c.id, 0);
             }
 
             if (!c.isAwake('Pukka')) {
@@ -99,12 +99,12 @@ export const demonRoles = {
             if (target) {
                 logSkillResolution(c.id, `使 #${target.id} ::poisoned::。`);
                 target.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
-                _store.set(c.id, target.id);
+                playerData.set(c.id, target.id);
             }
         },
         afterTagAdd(c, tg) {
             if (tg.type === TagType.dead) {
-                const targetId = _store.get(c.id);
+                const targetId = playerData.get(c.id);
                 if (targetId && targetId !== 0) {
                     const target = useDataStore().chars.get(targetId);
                     if (target) {
@@ -123,7 +123,9 @@ export const demonRoles = {
             overall: "充能或释放不会生效。",
         },
         onStart(c) {
-            _store.set(c.id, 0);
+            // 使用独立的充能计数键，避免与伪装角色的 skill 键冲突
+            c.registerLimitSkill('poCharge', 1);
+            c.useSkill('poCharge'); // 初始充能为 0
         },
         nightActionPriority() {
             return 1;
@@ -137,13 +139,12 @@ export const demonRoles = {
                 return;
             }
 
-            const charge = _store.get(c.id) ?? 0;
-
-            if (charge < 1) {
-                _store.set(c.id, 1);
-                logSkillResolution(c.id, '充能（0→1）。');
+            if (!c.allowUseSkill('poCharge')) {
+                // 仅重置自己的充能计数，避免重置伪装角色的限次技能
+                c.resetSkill('poCharge');
+                logSkillResolution(c.id, '完成一次充能。');
             } else {
-                _store.set(c.id, 0);
+                c.useSkill('poCharge');
                 const targets = pickGood(dataStore.charList(), 3);
                 const killed = targets.map(t => t.id).sort();
                 if (killed.length > 0) {
@@ -167,7 +168,7 @@ export const demonRoles = {
             overall: "不会有玩家死亡，爪牙能力也不会保留。",
         },
         onStart(c) {
-            _store.set(c.id, 0);
+            playerData.set(c.id, 0);
         },
         nightActionPriority() {
             return 1;
@@ -180,13 +181,13 @@ export const demonRoles = {
             const dataStore = useDataStore();
             if (Time.getDay(t) < 2) return;
 
-            let justRetained = false;
-            const storedId = _store.get(c.id) ?? 0;
+            let justGained = false;
+            const storedId = playerData.get(c.id) ?? 0;
 
             // 检测首个爪牙死亡（仅触发一次）
             if (storedId === 0) {
                 if (!c.isAwake('Vigormortis')) {
-                    _store.set(c.id, -1);  // 永久标记：混乱导致能力流失
+                    playerData.set(c.id, -1);  // 永久标记：混乱导致能力流失
                     logSkillResolution(c.id, '由于神志不清，爪牙能力永久流失。');
                     return;
                 }
@@ -194,9 +195,12 @@ export const demonRoles = {
                     x => x.getRoleDetail().faction === Faction.minion && x.hasTag(TagType.dead)
                 );
                 if (deadMinion) {
-                    _store.set(c.id, deadMinion.id);
-                    deadMinion.addTag(TagType.retained, { till: Time.FAR_FUTURE });
-                    justRetained = true;
+                    playerData.set(c.id, deadMinion.id);
+                    deadMinion.addTag(TagType.gained, {
+                        till: Time.FAR_FUTURE,
+                        meta: [deadMinion.role],
+                    });
+                    justGained = true;
                     const sz = dataStore.playerNumber();
                     const cw = dataStore.chars.get((deadMinion.id + 1).wrap(sz));
                     const ccw = dataStore.chars.get((deadMinion.id - 1).wrap(sz));
@@ -219,7 +223,7 @@ export const demonRoles = {
             }
 
             // 杀戮（保留之夜跳过）
-            if (justRetained) return;
+            if (justGained) return;
 
             const target = pickGood(dataStore.charList())[0];
             if (target) {
@@ -230,6 +234,63 @@ export const demonRoles = {
                     meta: { type: 'demon' },
                 });
             }
+        },
+    },
+    Lleech: {
+        display: '痢蛭',
+        faction: Faction.demon,
+        summery: '“美味，美味，美味，美味，美味，美味，美味，美味的脑——馅儿饼！是的。美味的老馅儿饼。我想说的就是这个。”',
+        ability: `::nfNight::，随机一名存活::kind::（::villager::优先）：他死亡。在首个夜晚，会有随机一名存活的::kind::：他::poisoned::，只有当他处于死亡状态时痢蛭才能够死亡。`,
+        abnormal: {
+            overall: "不会有玩家死亡；痢蛭失去保护，即使宿主存活，痢蛭也可能死亡。",
+        },
+        onStart(c) {
+            playerData.set(c.id, 0);
+        },
+        nightActionPriority() {
+            return 1;
+        },
+        onNightSkill(c, t) {
+            const dataStore = useDataStore();
+            const day = Time.getDay(t);
+
+            if (day === 1) {
+                // 首个夜晚：选择一名存活善良玩家作为宿主并使其中毒（即使异常也生效）
+                const host = pickGood(dataStore.charList())[0];
+                if (host) {
+                    playerData.set(c.id, host.id);// 打上宿主标记：击杀选择时按外来者同级处理（不优先击杀，保护痢蛭免疫）
+                    host.addTag(TagType.unfavored, { source: c.id }); host.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
+                    logSkillResolution(c.id, `选择了 #${host.id}（::${host.role}::）作为宿主并使其中毒。`);
+                }
+                return;
+            }
+
+            // 非首夜：随机一名存活善良玩家（镇民优先）死亡
+            if (!c.isAwake('Lleech')) {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                return;
+            }
+            const target = pickGood(dataStore.charList())[0];
+            if (target) {
+                logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
+                target.addTag('dying', {
+                    till: Time.makeTime(day, Time.Phase.Dawn),
+                    source: c.id,
+                    meta: { type: 'demon' },
+                });
+            }
+        },
+        beforeTagAdd(c, tg) {
+            // 宿主存活时，清醒（非神志不清/伪装）的痢蛭不会死亡；异常的痢蛭不享受免疫
+            if (tg.type === TagType.dead && c.isAwake('Lleech')) {
+                const hostId = playerData.get(c.id);
+                const host = hostId ? useDataStore().chars.get(hostId) : undefined;
+                if (host && !host.hasTag(TagType.dead)) {
+                    logSkillResolution(c.id, `宿主 #${hostId} 仍存活，::Lleech::不会死亡。`);
+                    return false;
+                }
+            }
+            return true;
         },
     }
 } satisfies Record<string, IRole>;

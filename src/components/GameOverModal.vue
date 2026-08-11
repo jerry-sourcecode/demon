@@ -387,8 +387,7 @@ import {
 	NProgress,
 	NStatistic,
 } from "naive-ui";
-import { RoleMap, Faction, type RoleType } from "@/data/model";
-import { FACTION_COLORS } from "@/data/keywords";
+import { RoleMap, Faction, type RoleType, type Alignment } from "@/data/model";
 import type { GameEvent } from "@/data/gameLog";
 import type { MatchRecord } from "@/data/match";
 import { Time } from "@/utils/time";
@@ -426,6 +425,7 @@ function formatDate(iso: string): string {
 interface CharInfo {
 	id: number;
 	role: RoleType;
+	alignment: Alignment;
 	isEvilByFaction: boolean;
 	dead: boolean;
 	deathCause: string;
@@ -451,11 +451,14 @@ const charList = computed<CharInfo[]>(() => {
 			const deathType = fc?.deathType;
 			const disguiseRole = fc?.disguiseRole ?? null;
 			const fac = RoleMap[role]?.faction;
+			const isEvilByFaction =
+				fac === Faction.demon || fac === Faction.minion;
 			return {
 				id,
 				role,
-				isEvilByFaction:
-					fac === Faction.demon || fac === Faction.minion,
+				// 优先使用记录中的阵营；缺失时回退到初始角色阵营，避免全蓝
+				alignment: fc?.alignment ?? (isEvilByFaction ? "evil" : "good"),
+				isEvilByFaction,
 				dead,
 				deathCause: dead
 					? (deathCauseMap[deathType ?? "other"] ?? "已死亡")
@@ -467,8 +470,8 @@ const charList = computed<CharInfo[]>(() => {
 });
 
 function factionColor(c: CharInfo): string {
-	const fac = RoleMap[c.role]?.faction;
-	return FACTION_COLORS[fac ?? "unknown"] || "#888";
+	// 按游戏结束时的阵营（善良/邪恶）着色
+	return c.alignment === "evil" ? "#f74f4f" : "#4fc3f7";
 }
 
 function factionLabel(c: CharInfo): string {

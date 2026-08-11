@@ -79,7 +79,12 @@ export const Alignment = {
 export type Alignment = typeof Alignment[keyof typeof Alignment];
 
 /** 共享角色状态（key = 角色 id）。各角色按自己的 id 存取互不冲突 */
-export const _store = new Map<number, number>();
+export const playerData = new Map<number, number>();
+
+/** 清空共享角色状态（新游戏开始 / 读档恢复时调用，避免跨局状态残留） */
+export function resetRoleStore(): void {
+    playerData.clear();
+}
 
 // ── 常用查询函数 ──
 
@@ -519,7 +524,7 @@ export function buildHerbDoctorPremise(target: Character, awake: boolean): strin
 该角色的能力描述：${abil.substring(0, 200)}
 
 【任务】
-你是一个说书人。郎中在夜晚对一名玩家"诊脉"，你需要生成一个与该玩家能力相关的词语。
+你是一个说书人。郎中在夜晚对一名玩家"诊脉"，${awake ? '你需要给出一个与该玩家能力相关的词语' : '**由于郎中的状态异常，你需要给出一个与该玩家能力无关的随机词语。**若该玩家有伪装，你可以给出与该玩家伪装能力有关的词语。'}。
 
 要求：
 - 词语应为 2\~4 个汉字，必须有明确含义。

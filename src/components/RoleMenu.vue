@@ -35,20 +35,23 @@
 				<n-button type="error" block @click="confirmGoHome"
 					>回到主页</n-button
 				>
+				<n-button block @click="showEncyclopedia = true">百科</n-button>
 				<n-button type="primary" ghost block @click="closeMenu"
 					>确定</n-button
 				>
 			</div>
 		</template>
 	</n-modal>
+	<RoleEncyclopedia v-model:show="showEncyclopedia" />
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { NModal, NDivider, NButton, useDialog } from "naive-ui";
 import { useDataStore } from "@/store/value";
 import { RoleMap, Faction } from "@/data/model";
 import AbilityMd from "./AbilityMd.vue";
+import RoleEncyclopedia from "./RoleEncyclopedia.vue";
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{
@@ -60,6 +63,8 @@ const showModal = computed({
 	get: () => props.show,
 	set: (v) => emit("update:show", v),
 });
+
+const showEncyclopedia = ref(false);
 
 const dataStore = useDataStore();
 const dialog = useDialog();

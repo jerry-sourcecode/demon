@@ -19,11 +19,19 @@ const props = defineProps<{
 	roleKey: RoleType;
 	titlePrefix?: string;
 	titleSuffix?: string;
+	/** 覆盖标题显示（如死亡的邪恶玩家显示「邪恶玩家」） */
+	roleDisplayOverride?: string;
+	/** 覆盖阵营关键词（如 ::evil::） */
+	factionKeyword?: string;
 }>();
 
 const titlePrefix = computed(() => props.titlePrefix ?? "");
 const titleSuffix = computed(() => props.titleSuffix ?? "");
 
-const roleDisplay = computed(() => RoleMap[props.roleKey].display);
-const faction = computed(() => RoleMap[props.roleKey].faction);
+const roleDisplay = computed(
+	() => props.roleDisplayOverride ?? RoleMap[props.roleKey].display,
+);
+const faction = computed(
+	() => props.factionKeyword ?? RoleMap[props.roleKey].faction,
+);
 </script>

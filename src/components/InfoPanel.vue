@@ -155,6 +155,17 @@ const entries = computed<InfoEntry[]>(() => {
 					meta.target > 0
 						? getCharLabel(meta.target)
 						: `#${meta.target}`;
+				// 再次处决已死亡的玩家
+				if (meta.alreadyDead) {
+					result.push({
+						id: event.id,
+						type: "execute",
+						timeStr: t,
+						tag: "处决",
+						text: `${targetLabel} 被再次处决`,
+					});
+					break;
+				}
 				// 查看后续是否有该目标的处决死亡
 				let diedByExecute = false;
 				let j = i + 1;

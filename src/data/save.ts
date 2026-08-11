@@ -2,6 +2,7 @@ import type { GameEvent } from "./gameLog";
 import { setLog } from "./gameLog";
 import type { MatchConfig } from "./match";
 import { Character, type RoleType, Alignment } from "./model";
+import { serializeProtectMeta, restoreProtectMeta } from "./tag";
 import type { TagType } from "./tag";
 import type { Time } from "@/utils/time";
 
@@ -73,7 +74,12 @@ export function serializeChars(
                 type: t.type,
                 till: saveTill(t.till) as any,
                 source: t.source,
-                meta: t.meta !== undefined ? JSON.parse(JSON.stringify(t.meta)) : undefined,
+                // 保护回调（函数）无法 JSON 序列化，转为可序列化描述
+                meta: t.meta !== undefined
+                    ? (typeof t.meta === 'function'
+                        ? serializeProtectMeta(t.meta as any)
+                        : JSON.parse(JSON.stringify(t.meta)))
+                    : undefined,
             })),
             customTags: [...c.customTags],
             dynamicTags: [...c.dynamicTags],
@@ -98,7 +104,10 @@ export function deserializeChars(
             type: t.type,
             till: restoreTill(t.till as any),
             source: t.source,
-            meta: t.meta !== undefined ? JSON.parse(JSON.stringify(t.meta)) : undefined,
+            // 保护描述重建为回调；其余按原样恢复
+            meta: t.meta && typeof t.meta === 'object' && 'kind' in t.meta
+                ? restoreProtectMeta(t.meta as any)
+                : (t.meta !== undefined ? JSON.parse(JSON.stringify(t.meta)) : undefined),
         })) as any;
         c.customTags = [...d.customTags];
         c.dynamicTags = [...d.dynamicTags];

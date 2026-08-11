@@ -9,7 +9,7 @@
  */
 
 import { useEmitter } from "./store/emit";
-import { Character, Faction, Alignment, pickRoles, RoleMap, shuffle, type RoleType } from "./data/model";
+import { Character, Faction, Alignment, pickRoles, RoleMap, shuffle, resetRoleStore, type RoleType } from "./data/model";
 import { useDataStore } from "./store/value";
 import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
@@ -66,15 +66,32 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
  * 在每次阶段切换时调用，让角色响应时间变化（如技能冷却、状态刷新）。
  * 已死亡且没有「保留」标记的角色跳过。
  */
+/**
+ * 收集角色应执行技能的角色列表：
+ * - 本体角色（x.role）
+ * - 获得的能力（gained meta 数组）
+ * - 伪装角色（disguise meta），供酒鬼/邪恶角色的伪装身份使用
+ */
+function collectSkillRoles(x: Character): RoleType[] {
+    const roles = new Set<RoleType>([x.role]);
+    // 获得的能力
+    for (const tg of x.getTag(TagType.gained)) {
+        for (const r of tg.meta as RoleType[]) roles.add(r);
+    }
+    // 伪装角色的能力（酒鬼/邪恶角色的伪装身份）
+    if (x.hasTag(TagType.disguise)) {
+        roles.add(x.getTag(TagType.disguise)[0]!.meta as RoleType);
+    }
+    return [...roles];
+}
+
 function triggerTimeChange(dataStore: ReturnType<typeof useDataStore>) {
     dataStore.chars.forEach(x => {
-        // 跳过已死亡且无「保留」标记的角色（保留标记为亡骨魔所加，用于保留爪牙能力）
-        if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
-        // 触发本体角色的 onTimeChange
-        runFn(RoleMap[x.role].onTimeChange, x, dataStore.time);
-        // 如果有伪装，同时触发伪装角色的 onTimeChange
-        const tg = x.getTag(TagType.disguise)[0];
-        if (tg) runFn(RoleMap[tg.meta].onTimeChange, x, dataStore.time);
+        // 跳过已死亡且未「获得能力」标记的角色（亡骨魔保留爪牙 / 双面人获得能力）
+        if (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained)) return;
+        for (const role of collectSkillRoles(x)) {
+            runFn(RoleMap[role].onTimeChange, x, dataStore.time);
+        }
     });
 }
 
@@ -87,13 +104,9 @@ function triggerTimeChange(dataStore: ReturnType<typeof useDataStore>) {
 function hasActivatableSkill(dataStore: ReturnType<typeof useDataStore>): boolean {
     let found = false;
     dataStore.chars.forEach(x => {
-        if (found || (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained))) return;
-        // 检查本体角色
-        if (runFn(RoleMap[x.role].canActivateSkill, x, dataStore.time)) { found = true; return; }
-        // 检查伪装角色
-        if (x.hasTag(TagType.disguise)) {
-            const dis_role = x.getTag(TagType.disguise)[0]!.meta;
-            if (runFn(RoleMap[dis_role].canActivateSkill, x, dataStore.time)) found = true;
+        if (found || (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained))) return;
+        for (const role of collectSkillRoles(x)) {
+            if (runFn(RoleMap[role].canActivateSkill, x, dataStore.time)) { found = true; return; }
         }
     });
     return found;
@@ -153,6 +166,9 @@ function swapRoles(from: Faction, to: Faction, count: number) {
  */
 export async function start(matchConfig: MatchConfig) {
     const dataStore = useDataStore();
+
+    // 新游戏开始：清空跨局共享角色状态，避免珀等充能/标记残留
+    resetRoleStore();
 
     // ── 1. 初始化 store ──
     dataStore.currentMatchConfig = { ...matchConfig };
@@ -350,6 +366,9 @@ export async function resume() {
     const dataStore = useDataStore();
     const emitter = useEmitter();
 
+    // 读档恢复：清空共享角色状态（_store 未序列化，避免沿用上一局残留）
+    resetRoleStore();
+
     // 处理当前阶段（不 advance time，因为存档时的时间点已经处理过半）
     await processCurrentPhase(dataStore, emitter);
 
@@ -448,15 +467,10 @@ async function runGameLoop(
             // 收集所有角色的夜间技能，按优先级降序执行
             const order: { prio: number; c: Character; role: RoleType }[] = [];
             dataStore.chars.forEach(x => {
-                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.retained)) return;
-                // 本体技能的优先级
-                let prio = runFn(x.getRoleDetail().nightActionPriority, x);
-                if (prio !== undefined) order.push({ prio, c: x, role: x.role });
-                // 伪装技能的优先级
-                if (x.hasTag(TagType.disguise)) {
-                    const dis_role = x.getTag(TagType.disguise)[0]!.meta;
-                    prio = runFn(RoleMap[dis_role].nightActionPriority, x);
-                    if (prio !== undefined) order.push({ prio, c: x, role: dis_role });
+                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained)) return;
+                for (const role of collectSkillRoles(x)) {
+                    const prio = runFn(RoleMap[role].nightActionPriority, x);
+                    if (prio !== undefined) order.push({ prio, c: x, role });
                 }
             });
             // 按优先级从高到低执行

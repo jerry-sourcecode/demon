@@ -2,7 +2,7 @@
  * 角色模块：villager.ts（镇民阵营角色）
  */
 import { Time } from "../../utils/time";
-import { TagType } from "../tag";
+import { TagType, makeProtect } from "../tag";
 import { shuffle, type Character } from "../model";
 import { useDataStore } from "../../store/value";
 import { useEmitter } from "../../store/emit";
@@ -15,6 +15,7 @@ import {
     Faction,
     Alignment,
     type IRole,
+    playerData,
     nearestAlivePair,
     f4PickPair,
     f4HandleNotAwake,
@@ -43,7 +44,7 @@ export const villagerRoles = {
             overall: "你的技能不会生效，且会获得错误的信息。",
         },
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
             return c.hasRecalled() && c.allowUseSkill('skill') && (Time.getPhase(t) === Time.Phase.Dawn || Time.getPhase(t) === Time.Phase.Dusk);
@@ -82,7 +83,8 @@ export const villagerRoles = {
         onTimeChange(c, t) {
             if (Time.getPhase(t) === Time.Phase.Night) {
                 c.addTag(TagType.protect, {
-                    till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn)
+                    till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                    meta: makeProtect({ kind: 'nightGuard' }),
                 });
             }
         }
@@ -197,7 +199,7 @@ export const villagerRoles = {
             overall: "得知随机一位::awake::的玩家与你的距离。"
         },
         onRecall(c) {
-            c.limitSkill('skill', 2);
+            c.registerLimitSkill('skill', 2);
         },
         canActivateSkill(c, t) {
             if (Time.getPhase(t) === Time.Phase.Day) {
@@ -255,7 +257,7 @@ export const villagerRoles = {
             overall: "无事发生。"
         },
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
             if (Time.getPhase(t) === Time.Phase.Day) {
@@ -345,7 +347,7 @@ export const villagerRoles = {
             overall: "两个角色均不属于该玩家。"
         },
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         onTimeChange(c, t) {
             if (Time.getPhase(t) === Time.Phase.Dawn) {
@@ -396,7 +398,7 @@ export const villagerRoles = {
             overall: "你有可能会获得错误线索。"
         },
         onRecall(c) {
-            c.limitSkill('skill', 2);
+            c.registerLimitSkill('skill', 2);
         },
         canActivateSkill(c, t) {
             return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
@@ -512,11 +514,11 @@ export const villagerRoles = {
         onStart(c) {
             const dataStore = useDataStore();
             const x = randpick(dataStore.charList(), 1, (x) => !x.isEvil()).items[0];
-            x?.addTag(TagType.nemesis, { source: c.id });
+            playerData.set(c.id, x?.id ?? 0);
             logSkillResolution(c.id, `#${x?.id} ::${x?.role}:: 是占卜师的宿敌。`)
         },
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
             return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
@@ -532,24 +534,16 @@ export const villagerRoles = {
             if (!x) return false;
             c.useSkill('skill');
             let ans = false;
-            function isNemesis(ch: Character) {
-                let ans = false;
-                ch.getTag('nemesis').forEach(x => {
-                    if (x.source === c.id) {
-                        ans = true;
-                    }
-                })
-                return ans;
-            }
-            x.forEach((c) => {
-                if (c.isEvil() || (c.hasTag('nemesis') && isNemesis(c))) {
+            const nemesisId = playerData.get(c.id);
+            x.forEach((sel) => {
+                if (sel.isEvil() || (nemesisId && nemesisId !== 0 && sel.id === nemesisId)) {
                     ans = true;
                 }
             })
             if (!c.isAwake('FortuneTeller')) ans = !ans;
             x.sort((a, b) => a.id - b.id)
-            c.info.push(`在 ${x.map(c => `#${c.id}`).join('、')} 中**${!ans ? '不' : ''}存在**::evil::。`)
-            logSkillResolution(c.id, `在 ${x.map(c => `#${c.id}`).join('、')} 中${ans ? '发现' : '未发现'}邪恶`);
+            c.info.push(`在 ${x.map(sel => `#${sel.id}`).join('、')} 中**${!ans ? '不' : ''}存在**::evil::。`)
+            logSkillResolution(c.id, `在 ${x.map(sel => `#${sel.id}`).join('、')} 中${ans ? '发现' : '未发现'}邪恶`);
             return true;
         },
     },
@@ -588,7 +582,7 @@ export const villagerRoles = {
             overall: "该玩家不会死亡，即使他是::evil::。",
         },
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
             return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
@@ -620,7 +614,7 @@ export const villagerRoles = {
         },
         requiresAI: true,
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
             return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
@@ -699,7 +693,7 @@ export const villagerRoles = {
         },
         requiresAI: true,
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         canActivateSkill(c, t) {
             return c.allowUseSkill('skill') && Time.getPhase(t) === Time.Phase.Day;
@@ -823,7 +817,10 @@ export const villagerRoles = {
             }
 
             const till = Time.makeTime(Time.getDay(t), Time.Phase.Dawn);
-            chosen[0]!.addTag(TagType.protect, { till });
+            chosen[0]!.addTag(TagType.protect, {
+                till,
+                meta: makeProtect({ kind: 'nightGuard' }),
+            });
             logSkillResolution(c.id, `保护了 #${chosen[0]!.id}（::${chosen[0]!.role}::）。`);
         },
     },
@@ -868,14 +865,20 @@ export const villagerRoles = {
                 till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
                 source: c.id,
             });
-            chosen[0]!.addTag(TagType.protect, { till });
-            chosen[1]!.addTag(TagType.protect, { till });
+            chosen[0]!.addTag(TagType.protect, {
+                till,
+                meta: makeProtect({ kind: 'nightGuard' }),
+            });
+            chosen[1]!.addTag(TagType.protect, {
+                till,
+                meta: makeProtect({ kind: 'nightGuard' }),
+            });
         },
     },
     Pacifist: {
         display: '和平主义者',
         faction: Faction.villager,
-        ability: '被处决的::kind::60%可能不会死亡。',
+        ability: '被处决的::kind::有 60% 的可能不会死亡。',
         abnormal: {
             overall: "::kind::不会获得保护。"
         },
@@ -883,7 +886,10 @@ export const villagerRoles = {
             const dataStore = useDataStore();
             dataStore.chars.forEach(ch => {
                 if (ch.alignment === Alignment.good) {
-                    ch.addTag(TagType.pacifist, { source: c.id });
+                    ch.addTag(TagType.protect, {
+                        source: c.id,
+                        meta: makeProtect({ kind: 'pacifist', source: c.id }),
+                    });
                 }
             })
         }
@@ -897,7 +903,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你会必定得知错误的玩家或角色。",
         },
-        onRecall(c) { c.limitSkill('skill', 1); },
+        onRecall(c) { c.registerLimitSkill('skill', 1); },
         nightActionPriority() { return 6; },
         onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
@@ -925,7 +931,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你必定会得知错误的玩家或角色。若场上**不可能**有::outsider::，你会得知没有::outsider::，即使你的技能异常。",
         },
-        onRecall(c) { c.limitSkill('skill', 1); },
+        onRecall(c) { c.registerLimitSkill('skill', 1); },
         nightActionPriority() { return 5; },
         onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
@@ -961,7 +967,7 @@ export const villagerRoles = {
         abnormal: {
             overall: "你必定会得知错误的玩家或角色。若场上**不可能**有::minion::，你会得知没有::minion::，即使你的技能异常。",
         },
-        onRecall(c) { c.limitSkill('skill', 1); },
+        onRecall(c) { c.registerLimitSkill('skill', 1); },
         nightActionPriority() { return 4; },
         onNightSkill(c, _t) {
             if (!c.hasRecalled() || !c.allowUseSkill('skill')) return;
@@ -1015,7 +1021,7 @@ export const villagerRoles = {
             overall: "你必定会得知错误的数目。",
         },
         onRecall(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         nightActionPriority() {
             return 3;

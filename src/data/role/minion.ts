@@ -2,12 +2,12 @@
  * 角色模块：minion.ts（爪牙阵营角色）
  */
 import { Time } from "../../utils/time";
-import { TagType } from "../tag";
+import { TagType, isProtected, makeProtect } from "../tag";
 import { type Character } from "../model";
 import { useDataStore } from "../../store/value";
 import { randint, randpick } from "@/utils/utils";
 import { logSkillResolution } from "../gameLog";
-import { Faction, type IRole, _store, nearestAlive, pickGood } from "./model";
+import { Faction, Alignment, type IRole, playerData, nearestAlive, pickGood } from "./model";
 
 export const minionRoles = {
     Poisoner: {
@@ -49,7 +49,7 @@ export const minionRoles = {
             overall: "不会有人死亡。"
         },
         onStart(c) {
-            c.limitSkill('skill', 1);
+            c.registerLimitSkill('skill', 1);
         },
         nightActionPriority(c) {
             return 5;
@@ -95,16 +95,16 @@ export const minionRoles = {
                 return;
             }
             const evilList = dataStore.charList().filter(
-                x => x.isTrulyEvil() && !x.hasTag(TagType.executionImmune) && !x.hasTag(TagType.dead)
+                x => x.isTrulyEvil() && !x.hasTag(TagType.dead)
             );
             if (evilList.length === 0) {
                 c.info.push('没有可保护的::evil::。');
                 return
             }
             const target = randpick(evilList).items[0]!;
-            target.addTag(TagType.executionImmune, {
+            target.addTag(TagType.protect, {
                 till: Time.makeTime(Time.getDay(t) + 1, Time.Phase.Dawn),
-                meta: { day: Time.getDay(t) },
+                meta: makeProtect({ kind: 'dayExecute', day: Time.getDay(t) }),
             });
             logSkillResolution(c.id, `保护了 #${target.id}（::${target.role}::）免于处决。`);
         },
@@ -134,7 +134,7 @@ export const minionRoles = {
             overall: "不会有玩家死亡。但是+1::outsider::始终会生效。"
         },
         onStart(c) {
-            _store.set(c.id, 0);
+            playerData.set(c.id, 0);
         },
         onAdjustCounts(counts) {
             counts.outsider += 1;
@@ -152,9 +152,9 @@ export const minionRoles = {
             const deadOutsiders = dataStore.charList().filter(
                 x => x.getRoleDetail().faction === Faction.outsider && x.hasTag(TagType.dead)
             ).length;
-            const lastCount = _store.get(c.id) ?? 0;
+            const lastCount = playerData.get(c.id) ?? 0;
             if (deadOutsiders > lastCount) {
-                _store.set(c.id, deadOutsiders);
+                playerData.set(c.id, deadOutsiders);
                 const target = pickGood(dataStore.charList())[0];
                 logSkillResolution(c.id, `由于白天有::outsider::死亡，教父杀死了 #${target?.id}（::${target?.role}::）`)
                 target?.addTag('dying', {
@@ -165,4 +165,56 @@ export const minionRoles = {
             }
         },
     },
+    Vixen: {
+        display: '狐媚娘',
+        faction: Faction.minion,
+        summery: '“王上，妾身有两个妹妹，一个名为喜媚，一个名为琵琶。”',
+        ability: `首夜，会有一名::kind::：如果你死于处决且场上还有剩余的::evil::，他立即转变为邪恶阵营。`,
+        abnormal: {
+            overall: "不会有玩家转变为邪恶阵营。",
+        },
+        nightActionPriority() {
+            return 6;
+        },
+        onNightSkill(c, t) {
+            if (Time.getDay(t) !== 1) return;
+            const dataStore = useDataStore();
+            // 首个夜晚：选择一名善良玩家作为目标
+            const target = randpick(
+                dataStore.charList(),
+                1,
+                x => !x.isEvil() && x.id !== c.id,
+            ).items[0];
+            if (target) {
+                playerData.set(c.id, target.id);
+                // 打上魅惑标记：击杀选择时按外来者同级处理（不优先击杀）
+                target.addTag(TagType.unfavored, { source: c.id });
+                logSkillResolution(c.id, `选择了 #${target.id}（::${target.role}::）作为目标。`);
+            }
+        },
+        afterTagAdd(c, tg) {
+            // 死于处决时，魅惑目标转变为邪恶阵营（并立即中毒）
+            if (tg.type === TagType.dead && (tg.meta as any)?.type === 'execute') {
+                if (!c.isAwake('Vixen')) {
+                    logSkillResolution(c.id, '由于神志不清，目标未转变为邪恶阵营。');
+                    return;
+                }
+                const dataStore = useDataStore();
+                // 若狐媚娘是最后一名存活邪恶玩家，处决她将直接结束游戏，不触发转变
+                const otherEvilAlive = dataStore.charList().some(
+                    x => x.isTrulyEvil() && x.id !== c.id && !x.hasTag(TagType.dead)
+                );
+                if (!otherEvilAlive) {
+                    logSkillResolution(c.id, '狐媚娘是最后一名邪恶玩家，游戏结束，没有玩家转变为邪恶阵营。');
+                    return;
+                }
+                const targetId = playerData.get(c.id);
+                const target = targetId ? dataStore.chars.get(targetId) : undefined;
+                if (target && !target.hasTag(TagType.dead)) {
+                    target.alignment = Alignment.evil;
+                    logSkillResolution(c.id, `由于狐媚娘被处决，#${target.id}（::${target.role}::）转变为邪恶阵营。`);
+                }
+            }
+        },
+    }
 } satisfies Record<string, IRole>;

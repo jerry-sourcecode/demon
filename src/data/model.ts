@@ -1,5 +1,5 @@
 import { Time } from "../utils/time";
-import { TagType, type ITag } from "./tag";
+import { TagType, type ITag, type ProtectFn } from "./tag";
 import { TAG_RULES } from "./tag";
 import type { IRole } from "./roles";
 import { RoleMap } from "./roles";
@@ -9,7 +9,7 @@ import { useDataStore } from "../store/value";
 import { allRoleKeys, randpick } from "@/utils/utils";
 
 export type { IRole, RoleType } from "./roles";
-export { RoleMap, Faction, Alignment } from "./roles";
+export { RoleMap, Faction, Alignment, resetRoleStore } from "./roles";
 
 // ── Tag meta 类型系统 ──
 
@@ -21,15 +21,15 @@ interface TagMetaMap {
     dying: { force?: boolean; type?: DeadReasonType }
     confused: undefined;
     disguise: RoleType;
-    executionImmune: { day: number };
+    /** 获得的能力（亡骨魔保留爪牙 / 双面人获得镇民能力） */
+    gained: RoleType[];
     farmer: RoleType;
     recall: undefined;
     grandson: undefined;
     executed: undefined;
-    nemesis: undefined;
-    protect: undefined;
-    retained: undefined;
-    pacifist: undefined;
+    unfavored: undefined;
+    /** 保护（处决免疫 / 和平主义者 / 夜间守护），meta 为死因判定回调 */
+    protect: ProtectFn;
 }
 
 /** Tag 精确类型（discriminated union，meta 随 type 自动收窄） */
@@ -73,11 +73,17 @@ export class Character {
     /**
      * 判断技能是否有效。confused 始终无效；若 disguise.meta===role 也无效。
      */
+    /** 是否通过 gained 获得某角色能力 */
+    hasGainedRole(role: RoleType): boolean {
+        return this.getTag(TagType.gained).some(t => (t.meta as RoleType[]).includes(role));
+    }
+
     isAwake(role: RoleType): boolean {
         if (this.hasTag(TagType.confused)) return false;
         if (this.hasTag(TagType.disguise)) {
             const dis = this.getTag(TagType.disguise)[0];
-            if (dis && dis.meta === role && dis.meta !== 'TwoFaced') return false;
+            // 获得的能力不受伪装阻碍（如双面人伪装成镇民仍可使用其能力）
+            if (dis && dis.meta === role && !this.hasGainedRole(role)) return false;
         }
         return true;
     }
@@ -154,7 +160,7 @@ export class Character {
     }
 
     /** 注册一个限制次数的技能 */
-    limitSkill(key: string, max: number): void {
+    registerLimitSkill(key: string, max: number): void {
         this._skillUses.set(key, { used: 0, max });
     }
 
@@ -240,8 +246,8 @@ export function pickKindPreferVillager(chars: Character[], count: number = 1, fi
     const result: Character[] = [];
     const used = new Set<number>();
 
-    // 优先村民
-    const villagers = shuffle(chars.filter(x => x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
+    // 优先村民（带 unfavored 标记的玩家——痢蛭宿主/狐媚娘魅惑目标——按外来者同级处理，不进入优先梯队）
+    const villagers = shuffle(chars.filter(x => !x.hasTag(TagType.unfavored) && x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
     for (const v of villagers) {
         if (result.length >= count) break;
         result.push(v);
