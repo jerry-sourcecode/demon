@@ -146,7 +146,7 @@ export const demonRoles = {
             } else {
                 c.useSkill('poCharge');
                 const targets = pickGood(dataStore.charList(), 3);
-                const killed = targets.map(t => t.id).sort();
+                const killed = targets.map(t => t.id).sort((a, b) => a - b);
                 if (killed.length > 0) {
                     logSkillResolution(c.id, `释放充能，杀死了 ${killed.map(id => `#${id}`).join('、')}。`);
                 }
@@ -240,7 +240,7 @@ export const demonRoles = {
         display: '痢蛭',
         faction: Faction.demon,
         summery: '“美味，美味，美味，美味，美味，美味，美味，美味的脑——馅儿饼！是的。美味的老馅儿饼。我想说的就是这个。”',
-        ability: `::nfNight::，随机一名存活::kind::（::villager::优先）：他死亡。在首个夜晚，会有随机一名存活的::kind::：他::poisoned::，只有当他处于死亡状态时痢蛭才能够死亡。`,
+        ability: `::nfNight::，随机一名存活::kind::（::villager::优先）：他死亡。在首个夜晚，会有随机一名存活的::kind::作为宿主：他::poisoned::，只有当他处于死亡状态时痢蛭才能够死亡。每个白天，你可以选择一名玩家，若他是宿主，他死亡；否则你声望 -4。`,
         abnormal: {
             overall: "不会有玩家死亡；痢蛭失去保护，即使宿主存活，痢蛭也可能死亡。",
         },
@@ -288,6 +288,56 @@ export const demonRoles = {
                 if (host && !host.hasTag(TagType.dead)) {
                     logSkillResolution(c.id, `宿主 #${hostId} 仍存活，::Lleech::不会死亡。`);
                     return false;
+                }
+            }
+            return true;
+        },
+    },
+    Zombuul: {
+        display: '僵怖',
+        faction: Faction.demon,
+        summery: '“我不。明白。你的。方式。人类。同类。向我。指引。泥土。那是。圣地。静卧。安睡。我也。必须。长眠。立刻。”',
+        ability: `::nfNight::，随机一名存活::kind::（::villager::优先）：他死亡。当你首次死亡时，你仍被当作存活，仍会有玩家因为僵怖在晚上死亡，且由于你仍然存活，善良玩家无法获胜，直到你再次死亡。`,
+        abnormal: {
+            overall: "当晚不会由玩家因为僵怖死亡。若僵怖死亡时僵怖::abnormal::，则僵怖会立即完全死亡。",
+        },
+        onStart(c) {
+            playerData.set(c.id, 0);
+        },
+        nightActionPriority() {
+            return 1;
+        },
+        onNightSkill(c, t) {
+            const dataStore = useDataStore();
+            const day = Time.getDay(t);
+
+            if (day === 1) return; // 首夜不触发
+
+            // 非首夜：随机一名存活善良玩家（镇民优先）死亡
+            if (!c.isAwake('Lleech')) {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                return;
+            }
+            const target = pickGood(dataStore.charList())[0];
+            if (target) {
+                logSkillResolution(c.id, `杀死了 #${target.id}（::${target.role}::）。`);
+                target.addTag('dying', {
+                    till: Time.makeTime(day, Time.Phase.Dawn),
+                    source: c.id,
+                    meta: { type: 'demon' },
+                });
+            }
+        },
+        beforeTagAdd(c, tg) {
+            if (tg.type === TagType.dead && c.isAwake('Lleech')) {
+                if (c.hasTag(TagType.alive)) {
+                    logSkillResolution(c.id, `::Zombuul::再次死亡。`);
+                    c.clearTags(TagType.alive);
+                    return true;
+                }
+                else {
+                    c.addTag(TagType.alive, { till: Time.FAR_FUTURE });
+                    logSkillResolution(c.id, `::Zombuul::进入活死人状态。`);
                 }
             }
             return true;

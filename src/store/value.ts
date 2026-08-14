@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { RoleMap, Faction, type Character, type RoleType } from '../data/model'
+import { RoleMap, Faction, type Character, type RoleType, PlayerCharacter } from '../data/model'
 import { ref, type Ref, computed } from 'vue';
 import { Time } from '../utils/time';
 import { TagType } from '../data/tag';
@@ -15,6 +15,9 @@ export const ACTION_COST = {
 export const useDataStore = defineStore('data', () => {
     const chars: Ref<Map<number, Character>> = ref(new Map);
 
+    /** 玩家角色：可主动发动的技能 */
+    const playerCharacter: Ref<PlayerCharacter> = ref(new PlayerCharacter());
+
     const time = ref<Time.TimeNumber>(Time.NOT_STARTED);
 
     const reputation = ref(0);
@@ -27,7 +30,7 @@ export const useDataStore = defineStore('data', () => {
     /** 尚存活的真正邪恶角色（仅恶魔和爪牙，陌客不算） */
     const evilAlive = computed(() =>
         [...chars.value.values()].filter(c =>
-            c.isTrulyEvil() && !c.hasTag(TagType.dead)
+            c.isTrulyEvil() && (!c.hasTag(TagType.dead) || c.hasTag(TagType.alive))
         )
     );
 
@@ -157,6 +160,7 @@ export const useDataStore = defineStore('data', () => {
         gameOver.value = false;
         knownGoodRoles.value = new Set();
         possibleEvil.value = [];
+        playerCharacter.value = new PlayerCharacter();
         currentMatchConfig.value = null;
         // 清空角色自定义标签
         chars.value.forEach(c => { c.customTags = []; c.dynamicTags = []; });
@@ -214,5 +218,5 @@ export const useDataStore = defineStore('data', () => {
         removeSave();
     }
 
-    return { chars, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, canSpendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
+    return { chars, playerCharacter, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, canSpendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
 })

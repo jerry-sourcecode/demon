@@ -85,6 +85,10 @@ export const minionRoles = {
         abnormal: {
             overall: "该玩家被处决时仍会死亡。"
         },
+        onStart(c) {
+            // 记录上个夜晚保护的目标，用于保证与上个夜晚不同
+            playerData.set(c.id, 0);
+        },
         nightActionPriority() {
             return 9;
         },
@@ -94,19 +98,39 @@ export const minionRoles = {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
+            const prevId = playerData.get(c.id) ?? 0;
             const evilList = dataStore.charList().filter(
                 x => x.isTrulyEvil() && !x.hasTag(TagType.dead)
             );
-            if (evilList.length === 0) {
-                c.info.push('没有可保护的::evil::。');
-                return
+
+            // 与上个夜晚选择的目标不同；若排除后没有候选，则本晚不保护任何人
+            const candidates = prevId ? evilList.filter(x => x.id !== prevId) : evilList;
+            if (candidates.length === 0) {
+                logSkillResolution(c.id, '没有可保护的::evil::。');
+                return;
             }
-            const target = randpick(evilList).items[0]!;
+            const target = randpick(candidates).items[0]!;
+            playerData.set(c.id, target.id);
             target.addTag(TagType.protect, {
                 till: Time.makeTime(Time.getDay(t) + 1, Time.Phase.Dawn),
+                source: c.id,
                 meta: makeProtect({ kind: 'dayExecute', day: Time.getDay(t) }),
             });
             logSkillResolution(c.id, `保护了 #${target.id}（::${target.role}::）免于处决。`);
+        },
+        afterTagAdd(c, tg) {
+            // 魔鬼代言人死后，其给予的所有保护立即失效
+            if (tg.type === TagType.dead) {
+                const dataStore = useDataStore();
+                dataStore.chars.forEach(x => {
+                    if (x.getTag(TagType.protect).some(t => t.source === c.id)) {
+                        x.tags = x.tags.filter(
+                            t => !(t.type === TagType.protect && t.source === c.id),
+                        );
+                    }
+                });
+                logSkillResolution(c.id, '魔鬼代言人死亡，所有保护立即失效。');
+            }
         },
     },
     Baron: {
@@ -169,7 +193,7 @@ export const minionRoles = {
         display: '狐媚娘',
         faction: Faction.minion,
         summery: '“王上，妾身有两个妹妹，一个名为喜媚，一个名为琵琶。”',
-        ability: `首夜，会有一名::kind::：如果你死于处决且场上还有剩余的::evil::，他立即转变为邪恶阵营。`,
+        ability: `首夜，会有一名::kind::：如果你死于处决且场上还有剩余的::evil::，他立即::poisoned::转变为邪恶阵营。`,
         abnormal: {
             overall: "不会有玩家转变为邪恶阵营。",
         },
@@ -212,7 +236,11 @@ export const minionRoles = {
                 const target = targetId ? dataStore.chars.get(targetId) : undefined;
                 if (target && !target.hasTag(TagType.dead)) {
                     target.alignment = Alignment.evil;
-                    logSkillResolution(c.id, `由于狐媚娘被处决，#${target.id}（::${target.role}::）转变为邪恶阵营。`);
+                    target.addTag(TagType.confused, {
+                        till: Time.FAR_FUTURE,
+                        source: c.id,
+                    });
+                    logSkillResolution(c.id, `由于狐媚娘被处决，#${target.id}（::${target.role}::）转变为邪恶阵营并开始::poisoned::。`);
                 }
             }
         },

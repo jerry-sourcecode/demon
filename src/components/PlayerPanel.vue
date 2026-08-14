@@ -73,6 +73,36 @@
 					<AbilityMd :markdown="`::${item.key}:: × ${item.count}`" />
 				</p>
 			</div>
+			<!-- 左下角：玩家技能菜单 -->
+			<div class="ring-corner ring-corner--bl">
+				<n-dropdown
+					v-if="isDay && !selecting"
+					trigger="click"
+					placement="top"
+					:options="skillMenuOptions"
+					@select="onSkillMenuSelect">
+					<n-button class="skill-menu-btn" size="small"
+						>玩家技能</n-button
+					>
+				</n-dropdown>
+			</div>
+			<!-- 右下角：身份菜单 + 新手引导 -->
+			<div class="ring-corner ring-corner--br">
+				<n-button
+					class="sheet-btn"
+					size="small"
+					circle
+					@click="showRoleSheet = !showRoleSheet">
+					<IconClipboardList />
+				</n-button>
+				<n-button
+					class="tutorial-btn"
+					size="small"
+					circle
+					@click="showTutorial = true">
+					?
+				</n-button>
+			</div>
 
 			<!-- 环形卡片 -->
 			<div
@@ -136,22 +166,6 @@
 				</n-button>
 			</template>
 		</n-modal>
-		<!-- 身份菜单按钮（移动端用，代替 Tab 键） -->
-		<n-button
-			class="sheet-btn"
-			size="small"
-			circle
-			@click="showRoleSheet = !showRoleSheet">
-			<IconClipboardList />
-		</n-button>
-		<!-- 新手引导 -->
-		<n-button
-			class="tutorial-btn"
-			size="small"
-			circle
-			@click="showTutorial = true">
-			?
-		</n-button>
 		<TutorialGuide
 			v-if="showTutorial"
 			:steps="gameSteps"
@@ -178,17 +192,20 @@ import {
 	NNumberAnimation,
 	NInput,
 	NModal,
+	NDropdown,
 	useMessage,
+	type DropdownOption,
 } from "naive-ui";
 import { ACTION_COST, useDataStore } from "@/store/value.ts";
 import { useEmitter } from "@/store/emit.ts";
 import { Faction, type Character } from "@/data/model";
 import { Time } from "@/utils/time";
-import { UniqueQueue } from "@/utils/utils";
+import { UniqueQueue, runFn } from "@/utils/utils";
 import AbilityMd from "./AbilityMd.vue";
 import GameOverModal from "./GameOverModal.vue";
 import RoleMenu from "./RoleMenu.vue";
 import { start } from "@/game.ts";
+import { playerRoles, type PlayerRoleType } from "@/data/role/player";
 import { useMatchStore } from "@/store/matchStore";
 import { DEFAULT_MATCH_CONFIG, type MatchRecord } from "@/data/match";
 import TutorialGuide from "./TutorialGuide.vue";
@@ -303,6 +320,41 @@ onMounted(() => {
 const showRoleSheet = ref(false);
 const showTutorial = ref(false);
 const gameSteps = GAME_STEPS;
+
+// ── 玩家技能菜单（玩家/说书人技能，如痢蛭白天选择宿主） ──
+
+const isDay = computed(
+	() =>
+		Time.getPhase(dataStore.time) === Time.Phase.Day && !dataStore.gameOver,
+);
+
+const skillMenuOptions = computed<DropdownOption[]>(() => {
+	const opts: DropdownOption[] = [];
+	for (const key of dataStore.playerCharacter.roles) {
+		const role = playerRoles[key];
+		if (!role) continue;
+		const enabled =
+			runFn(
+				role.canActivateSkill,
+				dataStore.playerCharacter,
+				dataStore.time,
+			) ?? false;
+		opts.push({ key, label: role.display, disabled: !enabled });
+	}
+	if (opts.length === 0) {
+		opts.push({
+			key: "empty",
+			label: "当前没有可发动的技能",
+			disabled: true,
+		});
+	}
+	return opts;
+});
+
+function onSkillMenuSelect(key: string) {
+	const role = playerRoles[key as PlayerRoleType];
+	if (role) runFn(role.onActiveSkill, dataStore.playerCharacter);
+}
 
 const TUTORIAL_GAME_KEY = "demon-tutorial-game";
 // 首次进入游戏时自动弹出游戏内引导
@@ -638,6 +690,17 @@ onUnmounted(() => {
 	top: 0;
 	right: 0;
 }
+.ring-corner--bl {
+	bottom: 0;
+	left: 0;
+}
+.ring-corner--br {
+	bottom: 0;
+	right: 0;
+	display: flex;
+	gap: 10px;
+	align-items: center;
+}
 
 /* ===== 选取态 ===== */
 .selectable {
@@ -655,18 +718,10 @@ onUnmounted(() => {
 	z-index: 100;
 }
 .tutorial-btn {
-	position: fixed;
-	bottom: 20px;
-	right: 20px;
-	z-index: 1000;
 	font-weight: bold;
 	font-size: 16px;
 }
 .sheet-btn {
-	position: fixed;
-	bottom: 20px;
-	right: 64px;
-	z-index: 1000;
 	font-size: 16px;
 }
 </style>

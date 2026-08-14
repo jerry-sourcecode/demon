@@ -22,7 +22,9 @@ export const TagType = {
     /** 击杀时不优先的目标（痢蛭宿主 / 狐媚娘魅惑目标，按外来者同级处理） */
     unfavored: "unfavored",
     /** 保护（处决免疫 / 和平主义者 / 夜间守护），meta 为死因判定回调 */
-    protect: "protect"
+    protect: "protect",
+    /** 僵怖处于活死人状态 */
+    alive: "alive",
 } as const;
 
 export type TagType = typeof TagType[keyof typeof TagType];
@@ -39,8 +41,8 @@ export interface ITag {
 
 // ── 保护判定（处决免疫 / 和平主义者 / 夜间守护 合并为 protect） ──
 
-/** 保护回调：传入死因，返回是否保护 */
-export type ProtectFn = (cause: DeadReasonType) => boolean;
+/** 保护回调：传入死因与被保护目标，返回是否保护 */
+export type ProtectFn = (cause: DeadReasonType, target?: Character) => boolean;
 
 /** 保护规则的可序列化描述（用于存档重建回调） */
 export interface ProtectDesc {
@@ -54,9 +56,11 @@ const PROTECT_FACTORIES: Record<ProtectDesc['kind'], (d: ProtectDesc) => Protect
     // 处决免疫（魔鬼代言人）：当天处决不死亡
     dayExecute: (d) => (cause) =>
         cause === 'execute' && Time.getDay(useDataStore().time) === d.day,
-    // 和平主义者：处决有 60% 概率不死亡（施法者存活且清醒）
-    pacifist: (d) => (cause) => {
+    // 和平主义者：处决有 60% 概率不死亡（施法者存活且清醒，且目标阵营不为邪恶）
+    pacifist: (d) => (cause, target) => {
         if (cause !== 'execute') return false;
+        // 不保护阵营为邪恶的玩家（如被狐媚娘转变阵营）
+        if (target?.isEvil()) return false;
         const p = useDataStore().chars.get(d.source!);
         if (!p || p.hasTag(TagType.dead) || !p.isAwake('Pacifist')) return false;
         return randint(1, 10) <= 6;
@@ -88,7 +92,7 @@ export function restoreProtectMeta(desc: ProtectDesc): ProtectFn {
 export function isProtected(c: Character, cause: DeadReasonType): boolean {
     return c.getTag(TagType.protect).some(t => {
         const fn = t.meta as unknown as ProtectFn;
-        return typeof fn === 'function' && fn(cause);
+        return typeof fn === 'function' && fn(cause, c);
     });
 }
 
@@ -136,7 +140,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     },
     [TagType.dead]: {
         beforeAdd(c) {
-            if (c.hasTag(TagType.dead)) return false;
+            if (c.hasTag(TagType.dead) && !c.hasTag(TagType.alive)) return false;
             return true;
         },
         afterAdd(c, tg) {
@@ -175,7 +179,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
     },
     [TagType.executed]: {
         beforeAdd(c) {
-            if (c.hasTag(TagType.dead)) return false;
+            if (c.hasTag(TagType.dead) && !c.hasTag(TagType.alive)) return false;
             // 统一保护判定：处决死因（处决免疫 / 和平主义者）
             if (isProtected(c, 'execute')) {
                 logSkillResolution(c.id, `被处决成功但没有死亡（受到保护）。`)

@@ -15,6 +15,7 @@ import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
 import { TagType } from "./data/tag";
 import { logGameStart, logGameEnd } from "./data/gameLog";
+import { playerRoles, PlayerRoleType } from "./data/role/player";
 import type { MatchConfig } from "./data/match";
 
 /**
@@ -93,6 +94,20 @@ function triggerTimeChange(dataStore: ReturnType<typeof useDataStore>) {
             runFn(RoleMap[role].onTimeChange, x, dataStore.time);
         }
     });
+    // 玩家（说书人）技能的时间钩子
+    for (const key of dataStore.playerCharacter.roles) {
+        runFn(playerRoles[key]?.onTimeChange, dataStore.playerCharacter, dataStore.time);
+    }
+}
+
+/** 根据可能的邪恶角色，同步玩家可发动的技能 */
+function syncPlayerRoles(dataStore: ReturnType<typeof useDataStore>) {
+    const roles: PlayerRoleType[] = [];
+    if (dataStore.possibleEvil.includes('Lleech')) roles.push(PlayerRoleType.lleechHost);
+    dataStore.playerCharacter.roles = roles;
+    for (const key of roles) {
+        runFn(playerRoles[key]?.onStart, dataStore.playerCharacter);
+    }
 }
 
 /**
@@ -211,7 +226,7 @@ export async function start(matchConfig: MatchConfig) {
         ...pickRoles(Faction.villager, matchConfig.villager),
         ...pickRoles(Faction.outsider, matchConfig.outsider),
         ...pickRoles(Faction.minion, matchConfig.minion),
-        ...pickRoles(Faction.demon, matchConfig.demon),
+        ...pickRoles(Faction.demon, matchConfig.demon - 1), 'Zombuul'
     ];
     const shuffled = shuffle(player);
 
@@ -305,6 +320,7 @@ export async function start(matchConfig: MatchConfig) {
         }
     })
     dataStore.initPossibleEvil(actualEvil);
+    syncPlayerRoles(dataStore);
 
     // ── 7. 计算镇民/外来者数量浮动范围 ──
     // 用于信息角色（如调查员、厨师）推理时参考
@@ -368,6 +384,9 @@ export async function resume() {
 
     // 读档恢复：清空共享角色状态（_store 未序列化，避免沿用上一局残留）
     resetRoleStore();
+
+    // 恢复玩家（说书人）可发动的技能
+    syncPlayerRoles(dataStore);
 
     // 处理当前阶段（不 advance time，因为存档时的时间点已经处理过半）
     await processCurrentPhase(dataStore, emitter);
@@ -467,7 +486,7 @@ async function runGameLoop(
             // 收集所有角色的夜间技能，按优先级降序执行
             const order: { prio: number; c: Character; role: RoleType }[] = [];
             dataStore.chars.forEach(x => {
-                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained)) return;
+                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained) && !x.hasTag(TagType.alive)) return;
                 for (const role of collectSkillRoles(x)) {
                     const prio = runFn(RoleMap[role].nightActionPriority, x);
                     if (prio !== undefined) order.push({ prio, c: x, role });

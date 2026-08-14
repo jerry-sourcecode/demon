@@ -141,6 +141,12 @@ export const outsiderRoles = {
                 });
             }
         },
+        afterTagAdd(c, tg) {
+            // 双面人死亡后不再拥有获得的能力（避免死后仍行动）
+            if (tg.type === TagType.dead) {
+                c.clearTags(TagType.gained);
+            }
+        },
     },
     Puzzlemaster: {
         display: '解密大师',
@@ -148,7 +154,7 @@ export const outsiderRoles = {
         summery: '“当一个人开始认为某件事只不过是另一件事时，那么他通常都处在错误的边缘。耐心，耐心。不要把“只不过”和“应该”，“是”和“不是”混为一谈。”',
         ability: `一名::kind::::drunk::，即使你已死亡。每局游戏限一次，你可以猜测谁是那个因你而::drunk::的玩家，如果猜对了，你会得知一名::evil::及其身份，但如果猜错了，你会得知错误的信息。`,
         abnormal: {
-            overall: "仍会有人::drunk::，但若猜测时你::abnormal::，无论是否猜对，都会获得错误的信息。",
+            overall: "若你首夜::abnormal::，不会有人::drunk::，若猜测时你::abnormal::，无论是否猜对，都会获得错误的信息。",
         },
         onStart(c) {
             c.registerLimitSkill('skill', 1);
@@ -158,7 +164,7 @@ export const outsiderRoles = {
                 1,
                 x => !x.isTrulyEvil() && x.id !== c.id,
             ).items[0];
-            if (drunk) {
+            if (drunk && c.isAwake('Puzzlemaster')) {
                 playerData.set(c.id, drunk.id);
                 drunk.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
                 logSkillResolution(c.id, `#${drunk.id}（::${drunk.role}::）醉酒。`);

@@ -7,6 +7,7 @@ import type { RoleType } from "./roles";
 import { Faction, Alignment } from "./roles";
 import { useDataStore } from "../store/value";
 import { allRoleKeys, randpick } from "@/utils/utils";
+import type { PlayerRoleType } from "./role/player";
 
 export type { IRole, RoleType } from "./roles";
 export { RoleMap, Faction, Alignment, resetRoleStore } from "./roles";
@@ -30,6 +31,7 @@ interface TagMetaMap {
     unfavored: undefined;
     /** 保护（处决免疫 / 和平主义者 / 夜间守护），meta 为死因判定回调 */
     protect: ProtectFn;
+    alive: undefined;
 }
 
 /** Tag 精确类型（discriminated union，meta 随 type 自动收窄） */
@@ -43,7 +45,50 @@ type TypedTag<T extends TagType = TagType> = {
         : { meta: TagMetaMap[K] })
 }[T];
 
-export class Character {
+/** 角色基类：限次技能使用记录（Character 与 PlayerCharacter 共用） */
+export class BaseCharacter {
+    /** 限次技能使用记录（_ 前缀表示内部字段） */
+    _skillUses: Map<string, { used: number; max: number }> = new Map();
+
+    /** 注册一个限制次数的技能 */
+    registerLimitSkill(key: string, max: number): void {
+        this._skillUses.set(key, { used: 0, max });
+    }
+
+    /** 是否允许使用技能，未达上限返回 true，已达上限返回 false */
+    allowUseSkill(key: string): boolean {
+        const s = this._skillUses.get(key);
+        if (!s || s.used >= s.max) return false;
+        return true;
+    }
+
+    /** 尝试使用技能，成功返回 true 并计数+1，已达上限返回 false */
+    useSkill(key: string): boolean {
+        const s = this._skillUses.get(key);
+        if (!s || s.used >= s.max) return false;
+        s.used++;
+        return true;
+    }
+
+    /** 查询剩余可用次数（未注册返回 0） */
+    skillRemaining(key: string): number {
+        const s = this._skillUses.get(key);
+        return s ? s.max - s.used : 0;
+    }
+
+    /** 重置指定技能计数 */
+    resetSkill(key: string): void {
+        const s = this._skillUses.get(key);
+        if (s) s.used = 0;
+    }
+
+    /** 重置所有技能计数 */
+    resetAllSkills(): void {
+        this._skillUses.forEach(s => s.used = 0);
+    }
+}
+
+export class Character extends BaseCharacter {
     id: number;
     role: RoleType;
     /** 阵营，独立于角色类型 */
@@ -55,10 +100,9 @@ export class Character {
     customTags: string[];
     /** 玩家自定义文本标签（自由输入） */
     dynamicTags: string[];
-    /** 限次技能使用记录 */
-    private _skillUses: Map<string, { used: number; max: number }>;
 
     constructor(id: number, role: RoleType) {
+        super();
         this.id = id;
         this.role = role;
         this.alignment = Alignment.good;
@@ -67,7 +111,6 @@ export class Character {
         this.tags = [];
         this.customTags = [];
         this.dynamicTags = [];
-        this._skillUses = new Map();
     }
 
     /**
@@ -159,43 +202,6 @@ export class Character {
         });
     }
 
-    /** 注册一个限制次数的技能 */
-    registerLimitSkill(key: string, max: number): void {
-        this._skillUses.set(key, { used: 0, max });
-    }
-
-    /** 是否允许使用技能，未达上限返回 true，已达上限返回 false */
-    allowUseSkill(key: string): boolean {
-        const s = this._skillUses.get(key);
-        if (!s || s.used >= s.max) return false;
-        return true;
-    }
-
-    /** 尝试使用技能，成功返回 true 并计数+1，已达上限返回 false */
-    useSkill(key: string): boolean {
-        const s = this._skillUses.get(key);
-        if (!s || s.used >= s.max) return false;
-        s.used++;
-        return true;
-    }
-
-    /** 查询剩余可用次数（未注册返回 0） */
-    skillRemaining(key: string): number {
-        const s = this._skillUses.get(key);
-        return s ? s.max - s.used : 0;
-    }
-
-    /** 重置指定技能计数 */
-    resetSkill(key: string): void {
-        const s = this._skillUses.get(key);
-        if (s) s.used = 0;
-    }
-
-    /** 重置所有技能计数 */
-    resetAllSkills(): void {
-        this._skillUses.forEach(s => s.used = 0);
-    }
-
     /** 移除已过期的 Tag */
     pruneExpiredTags(): void {
         const now = useDataStore().time;
@@ -211,6 +217,16 @@ export class Character {
             rule?.afterRemove?.(this, t);
         }
         this.tags = this.tags.filter(t => t.till > now);
+    }
+}
+
+/** 玩家（说书人）角色：可主动发动的技能 */
+export class PlayerCharacter extends BaseCharacter {
+    /** 玩家可发动的技能键列表 */
+    roles: PlayerRoleType[] = [];
+
+    constructor() {
+        super();
     }
 }
 

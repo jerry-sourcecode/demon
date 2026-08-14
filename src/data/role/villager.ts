@@ -164,7 +164,7 @@ export const villagerRoles = {
         display: "农夫",
         faction: Faction.villager,
         summery: "“即使那些高高在上的人也需要吃东西。没有了我们，城市就会挨饿。”",
-        ability: `::recall::时，如果可能，会有1名失忆的::villager::会变成新的农夫，并得知原来的身份。`,
+        ability: `::recall::时，如果可能，75% 可能会有1名失忆的::villager::会变成新的农夫，并得知原来的身份。`,
         abnormal: {
             overall: "得知正确的原来的身份，不会有人变成农夫。"
         },
@@ -175,6 +175,9 @@ export const villagerRoles = {
             if (!c.isAwake('Farmer')) {
                 logSkillResolution(c.id, '由于神志不清，未能传承。');
                 return;
+            }
+            if (randint(1, 4) === 1) {
+                logSkillResolution(c.id, '技能发动正常，但概率未命中，因此未能传承。');
             }
             const dataStore = useDataStore();
             let x;
@@ -284,7 +287,6 @@ export const villagerRoles = {
             } else {
                 c.info.push(`对 #${obj.id} 发动复活失败。`);
                 logSkillResolution(c.id, `对 #${obj.id} 发动复活失败（技能异常）`);
-                return true;
             }
             return true;
         },
@@ -331,9 +333,9 @@ export const villagerRoles = {
             }
             if (!c.isAwake('Bishop')) {
                 const allIds = [...dataStore.chars.keys()];
-                ls = (randpick(allIds, has.length).items).sort();
+                ls = randpick(allIds, has.length).items;
             }
-            ls = ls.sort();
+            ls = ls.sort((a, b) => a - b);
             const sls: string[] = []
             ls.forEach((v) => sls.push(`#${v}`));
             c.info.push(`在${sls.join('、')}中，存在${has.join('、')}各一个。`)
@@ -714,8 +716,8 @@ export const villagerRoles = {
             }
 
             const adviceGoal = c.isAwake('Fisherman')
-                ? '请给我一些能帮助善良阵营获胜的策略建议。不需要完全基于事实，这是说书人认为对渔夫最有利的行动指引。'
-                : '请给我一些误导性的、对善良阵营**有害的糟糕**建议。';
+                ? '请给我一些能帮助善良阵营获胜（善良阵营获胜条件为：消灭所有邪恶玩家）的策略建议。不需要完全基于事实，这是说书人认为对渔夫最有利的行动指引。'
+                : '请给我一些误导性的、对善良阵营**有害的糟糕**建议。（善良阵营获胜条件为：消灭所有邪恶玩家）';
 
             const answer = await callAi(
                 aiConfig.service,
@@ -843,6 +845,8 @@ export const villagerRoles = {
                 required: true,
             });
             if (!chosen || chosen.length < 2) return;
+
+            chosen.sort((a, b) => a.id - b.id);
 
             logSkillActivate(c.id);
 

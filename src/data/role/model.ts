@@ -6,14 +6,30 @@
  */
 import { Time } from "../../utils/time";
 import { type ITag, TagType } from "../tag";
-import { type Character, pickKindPreferVillager } from "../model";
+import { type Character, type BaseCharacter, pickKindPreferVillager } from "../model";
 import { useDataStore } from "../../store/value";
 import { allRoleKeys, randint, randpick } from "@/utils/utils";
 import { logSkillResolution } from "../gameLog";
 import { RoleMap, type RoleType } from "./index";
 
+/** 角色钩子（按角色类型泛型化，供 IRole 与 IPlayerRole 复用，避免重复声明） */
+export interface RoleHooks<C extends BaseCharacter = BaseCharacter> {
+    /** 判断当前是否可以发动主动技能 */
+    canActivateSkill?: (c: C, t: Time.TimeNumber) => boolean,
+    /** 夜间行动优先级，越大越先行动 */
+    nightActionPriority?: (c: C) => number,
+    /** 夜间技能（优先级排序执行） */
+    onNightSkill?: (c: C, t: Time.TimeNumber) => void,
+    /** 释放主动技能时，返回 false 表示取消/失败 */
+    onActiveSkill?: (c: C) => boolean | void | Promise<boolean | void>,
+    /** 时间改变时（无优先级，阶段切换触发） */
+    onTimeChange?: (c: C, t: Time.TimeNumber) => void,
+    /** 游戏开始时 */
+    onStart?: (c: C) => void;
+}
+
 /** 角色定义接口 */
-export interface IRole {
+export interface IRole extends RoleHooks<Character> {
     display: string,
     faction: Faction,
     summery?: string,
@@ -30,20 +46,8 @@ export interface IRole {
     ability: string,
     /** 标记角色是否需要 AI（未配置 AI 时该角色不会出现在角色池） */
     requiresAI?: boolean,
-    /** 判断当前是否可以发动主动技能（无参，内部通过 useDataStore() 获取全局状态） */
-    canActivateSkill?: (c: Character, t: Time.TimeNumber) => boolean,
-    /** 夜间行动优先级，越大越先行动 */
-    nightActionPriority?: (c: Character) => number,
-    /** 夜间技能（优先级排序执行） */
-    onNightSkill?: (c: Character, t: Time.TimeNumber) => void,
-    /** 释放主动技能时，返回 false 表示取消/失败 */
-    onActiveSkill?: (c: Character) => boolean | void | Promise<boolean | void>,
     /** 回忆时 */
     onRecall?: (c: Character) => void,
-    /** 时间改变时（无优先级，阶段切换触发） */
-    onTimeChange?: (c: Character, t: Time.TimeNumber) => void,
-    /** 游戏开始时 */
-    onStart?: (c: Character) => void;
     /** 被施加 Tag 前触发，返回 false 阻止添加 */
     beforeTagAdd?: (c: Character, tg: ITag) => boolean;
     /** 被施加 Tag 后触发（副作用） */

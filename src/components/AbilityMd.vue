@@ -27,6 +27,13 @@ function attachKeywordPopovers(root?: HTMLElement) {
 		const color = span.dataset.kwColor!;
 		const display = span.textContent || key;
 
+		// 关键：当 keyword 位于某个 popover 的内容中时（例如角色介绍
+		// popover 里的 keyword），必须让嵌套的 keyword popover 禁用
+		// teleport（to=false），使其内容渲染在外层 popover 的 DOM 树内。
+		// 否则鼠标移入内层 keyword 内容时，外层 popover 会误判鼠标已离开
+		// 而触发关闭，导致整条嵌套 popover 链级联消失。
+		const to = span.closest(".n-popover") ? false : undefined;
+
 		// 在原位置插入 wrapper，移除占位 span
 		const wrapper = document.createElement("span");
 		span.parentNode!.insertBefore(wrapper, span);
@@ -47,6 +54,7 @@ function attachKeywordPopovers(root?: HTMLElement) {
 							delay: 200,
 							width: 260,
 							class: "popover",
+							to,
 							"onUpdate:show": (show: boolean) => {
 								if (show) {
 									// setTimeout：等待 Naive UI 的 Teleport 将内容挂载到 DOM
