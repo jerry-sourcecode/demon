@@ -314,7 +314,7 @@ export const demonRoles = {
             if (day === 1) return; // 首夜不触发
 
             // 非首夜：随机一名存活善良玩家（镇民优先）死亡
-            if (!c.isAwake('Lleech')) {
+            if (!c.isAwake('Zombuul')) {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
@@ -329,7 +329,7 @@ export const demonRoles = {
             }
         },
         beforeTagAdd(c, tg) {
-            if (tg.type === TagType.dead && c.isAwake('Lleech')) {
+            if (tg.type === TagType.dead && c.isAwake('Zombuul')) {
                 if (c.hasTag(TagType.alive)) {
                     logSkillResolution(c.id, `::Zombuul::再次死亡。`);
                     c.clearTags(TagType.alive);

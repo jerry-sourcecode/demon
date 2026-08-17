@@ -74,6 +74,12 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
  * - 伪装角色（disguise meta），供酒鬼/邪恶角色的伪装身份使用
  */
 function collectSkillRoles(x: Character): RoleType[] {
+    // 活死人（僵怖首次死亡后，同时拥有 dead + alive 标签）：
+    // 只保留本体技能——僵怖活死人仅能在夜间造成死亡并影响终局判定，
+    // 不再执行伪装身份或获得的能力
+    if (x.hasTag(TagType.dead) && x.hasTag(TagType.alive)) {
+        return [x.role];
+    }
     const roles = new Set<RoleType>([x.role]);
     // 获得的能力
     for (const tg of x.getTag(TagType.gained)) {
@@ -226,7 +232,7 @@ export async function start(matchConfig: MatchConfig) {
         ...pickRoles(Faction.villager, matchConfig.villager),
         ...pickRoles(Faction.outsider, matchConfig.outsider),
         ...pickRoles(Faction.minion, matchConfig.minion),
-        ...pickRoles(Faction.demon, matchConfig.demon - 1), 'Zombuul'
+        ...pickRoles(Faction.demon, matchConfig.demon)
     ];
     const shuffled = shuffle(player);
 
