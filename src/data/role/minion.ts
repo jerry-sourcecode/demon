@@ -49,7 +49,7 @@ export const minionRoles = {
             overall: "不会有人死亡。"
         },
         onStart(c) {
-            c.registerLimitSkill('skill', 1);
+            c.registerLimitSkill('assassinKill', 1);
         },
         nightActionPriority(c) {
             return 5;
@@ -57,7 +57,7 @@ export const minionRoles = {
         onNightSkill(c, t) {
             const dataStore = useDataStore();
             if (t !== Time.makeTime(2, Time.Phase.Night) && t !== Time.makeTime(3, Time.Phase.Night)) return;
-            if (!c.allowUseSkill('skill')) return;
+            if (!c.allowUseSkill('assassinKill')) return;
             if (t === Time.makeTime(2, Time.Phase.Night)) {
                 if (randint(0, 1) === 0) {
                     return;
@@ -66,7 +66,7 @@ export const minionRoles = {
             if (c.isAwake('Assassin')) {
                 const obj = pickGood(dataStore.charList())[0];
                 logSkillResolution(c.id, `刺杀了 #${obj?.id}（::${obj?.role}::）。`);
-                c.useSkill('skill');
+                c.useSkill('assassinKill');
                 obj?.addTag('dying', {
                     till: Time.makeTime(2, Time.Phase.Dawn),
                     source: c.id,

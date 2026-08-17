@@ -152,7 +152,7 @@ export const outsiderRoles = {
         display: '解密大师',
         faction: Faction.outsider,
         summery: '“当一个人开始认为某件事只不过是另一件事时，那么他通常都处在错误的边缘。耐心，耐心。不要把“只不过”和“应该”，“是”和“不是”混为一谈。”',
-        ability: `一名::kind::::drunk::，即使你已死亡。每局游戏限一次，你可以猜测谁是那个因你而::drunk::的玩家，如果猜对了，你会得知一名::evil::及其身份，但如果猜错了，你会得知错误的信息。`,
+        ability: `一名::kind::::drunk::，即使你已死亡。每局游戏限一次，你可以猜测谁是那个因你而::drunk::的玩家，如果猜对了，你会得知一名::evil::及其身份，但如果猜错了，你会得知一名::kind::，和一个随机的邪恶角色。`,
         abnormal: {
             overall: "若你首夜::abnormal::，不会有人::drunk::，若猜测时你::abnormal::，无论是否猜对，都会获得错误的信息。",
         },

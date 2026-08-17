@@ -316,7 +316,7 @@ export function cryptoRevealEvil(c: Character): boolean {
 /** 解密大师：错误信息（随机一名玩家 + 可能出现的邪恶身份，且保证该玩家不是该身份） */
 export function cryptoWrongInfo(c: Character, reason: string): void {
     const dataStore = useDataStore();
-    const player = randpick(dataStore.charList(), 1, p => p.id !== c.id).items[0];
+    const player = randpick(dataStore.charList(), 1, p => p.id !== c.id && !p.isTrulyEvil()).items[0];
     if (!player) {
         c.info.push('未能获取到有效信息。');
         return;

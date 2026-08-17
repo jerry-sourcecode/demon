@@ -562,13 +562,19 @@ export const villagerRoles = {
         },
         onNightSkill(c, t) {
             if (!c.hasRecalled()) return;
-            const { cw, ccw } = nearestAlivePair(c);
+            let { cw, ccw } = nearestAlivePair(c);
             let count = (cw?.isEvil() ? 1 : 0) + (ccw?.isEvil() ? 1 : 0);
 
             if (!c.isAwake('Empath')) {
                 if (count === 0) count = 1 + randint(0, 1);
                 else if (count === 2) count = randint(0, 1);
                 else count = count === 1 ? (randint(0, 1) === 0 ? 0 : 2) : randint(0, 2);
+            }
+
+            if (cw!.id > ccw!.id) {
+                let tmp = cw;
+                cw = ccw;
+                ccw = tmp;
             }
 
             c.info.push(`邻近两名存活玩家（#${cw?.id} 和 #${ccw?.id}）中有 ${count} 名::evil::。`);
@@ -1104,7 +1110,7 @@ export const villagerRoles = {
                 aiConfig.apiKey,
                 aiConfig.model,
                 premise,
-                `请为 #${target.id}（${RoleMap[targetRole].display}）生成一个与其能力相关的词语。`,
+                `请为 #${target.id}（${RoleMap[targetRole].display}）生成一个与其能力${c.isAwake('HerbDoctor') ? '相关的' : '无关的，且若其存在伪装，最好和伪装相关的'}词语。`,
             );
 
             // 解析 AI 回答中的词语和原因
@@ -1121,7 +1127,7 @@ export const villagerRoles = {
                 word = answer?.trim() ?? '（说书人沉默不语）';
             }
 
-            const statusTag = !c.isAwake('HerbDoctor') ? '（神志不清）' : '';
+            const statusTag = !c.isAwake('HerbDoctor') ? '（状态异常）' : '';
             c.info.push(`对 #${target.id} 诊脉：${word}`);
             logSkillResolution(
                 c.id,
