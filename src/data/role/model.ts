@@ -442,9 +442,12 @@ export function buildArtistPremise(): string {
 你必须仅回复一个 JSON 对象，格式如下：
 {"answer": "是", "reason": "简要原因"}
 {"answer": "否", "reason": "简要原因"}
-{"answer": "我不知道", "reason": "简要原因"}
 {"answer": "无法回答", "reason": "简短原因"}
 不要输出任何其他内容，只输出 JSON。
+
+【强制要求】
+- 禁止回答"我不知道"。即使信息不足或不确定，也必须基于已有信息给出最可能的"是"或"否"判断。
+- 只有当问题本身不是是非题（无法用"是/否"回答）时，才可以使用"无法回答"。
 
 例子：
 1. 
@@ -459,8 +462,8 @@ export function buildArtistPremise(): string {
 `;
 }
 
-/** 解析 AI 的 JSON 回答，返回 { answer: '是'|'否'|'我不知道'|'cannot_answer', reason: string } */
-export function parseArtistAnswer(raw: string): { answer: '是' | '否' | '我不知道' | 'cannot_answer'; reason: string } {
+/** 解析 AI 的 JSON 回答，返回 { answer: '是'|'否'|'cannot_answer', reason: string } */
+export function parseArtistAnswer(raw: string): { answer: '是' | '否' | 'cannot_answer'; reason: string } {
     try {
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('no json');
@@ -471,13 +474,13 @@ export function parseArtistAnswer(raw: string): { answer: '是' | '否' | '我�
 
         if (answer === '是') return { answer: '是', reason };
         if (answer === '否') return { answer: '否', reason };
-        if (answer === '我不知道') return { answer: '我不知道', reason };
+        // "我不知道" / "无法回答" 一律视为无法回答，阻止其被当作有效答案交给玩家
         return { answer: 'cannot_answer', reason };
     } catch {
         // JSON 解析失败，尝试正则匹配作为降级方案
         const text = raw.trim();
         if (/不知道|不清楚|无法确定|未知|don['']?t\s*know|unknown|not\s+sure/i.test(text)) {
-            return { answer: '我不知道', reason: '' };
+            return { answer: 'cannot_answer', reason: '' };
         }
         if (/^是|[\s,，。.!！?？]是|yes|correct|true|right/i.test(text)) {
             return { answer: '是', reason: '' };

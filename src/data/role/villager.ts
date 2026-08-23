@@ -664,7 +664,7 @@ export const villagerRoles = {
                 const parsed = parseArtistAnswer(answer ?? '');
 
                 if (parsed.answer === 'cannot_answer') {
-                    // AI 无法回答，提示用户重新提问，不消耗技能
+                    // AI 未能给出"是/否"答案（含"我不知道"），提示用户重新提问，不消耗技能
                     await emitter.emit('show-message', {
                         type: 'warning',
                         content: '说书人无法用"是"或"否"回答此问题，请换一个问题。',
@@ -675,7 +675,7 @@ export const villagerRoles = {
                 // 消耗技能
                 c.useSkill('skill');
 
-                // 神志不清时反转（是↔否，不知道不变）
+                // 神志不清时反转答案（是↔否）
                 let finalAnswer = parsed.answer;
                 if (!c.isAwake('Artist')) {
                     if (parsed.answer === '是') finalAnswer = '否';
@@ -685,7 +685,7 @@ export const villagerRoles = {
                 c.info.push(`我问说书人：「${question}」\n回答：${finalAnswer}`);
                 logSkillResolution(
                     c.id,
-                    `询问：「${question}」→ ${finalAnswer}${parsed.reason ? `（原因：${parsed.reason}）` : ''}${!c.isAwake('Artist') ? '（神志不清，已反转）' : ''}`,
+                    `询问：「${question}」→ ${parsed.answer}${parsed.reason ? `（原因：${parsed.reason}）` : ''}${!c.isAwake('Artist') ? `（神志不清，已反转为${finalAnswer}）` : ''}`,
                 );
                 return true;
             }

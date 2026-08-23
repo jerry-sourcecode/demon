@@ -162,7 +162,7 @@ function onKeyDown(e: KeyboardEvent) {
 		}
 		return;
 	}
-	if (e.key === "d" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+	if ((e.ctrlKey || e.metaKey) && e.key === "d" && !e.repeat) {
 		e.preventDefault();
 		toggleDraw();
 	}
