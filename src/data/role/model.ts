@@ -466,11 +466,9 @@ export function buildArtistPremise(): string {
 
 /** 解析 AI 的 JSON 回答，返回 { answer: '是'|'否'|'cannot_answer', reason: string } */
 export function parseArtistAnswer(raw: string): { answer: '是' | '否' | 'cannot_answer'; reason: string } {
+    // 不容忍 markdown 代码块或多余文字：要求整段就是合法 JSON，否则视为无法回答
     try {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('no json');
-
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(raw.trim());
         const answer = (parsed.answer ?? '').trim();
         const reason = (parsed.reason ?? '').trim();
 
@@ -479,17 +477,6 @@ export function parseArtistAnswer(raw: string): { answer: '是' | '否' | 'canno
         // "我不知道" / "无法回答" 一律视为无法回答，阻止其被当作有效答案交给玩家
         return { answer: 'cannot_answer', reason };
     } catch {
-        // JSON 解析失败，尝试正则匹配作为降级方案
-        const text = raw.trim();
-        if (/不知道|不清楚|无法确定|未知|don['']?t\s*know|unknown|not\s+sure/i.test(text)) {
-            return { answer: 'cannot_answer', reason: '' };
-        }
-        if (/^是|[\s,，。.!！?？]是|yes|correct|true|right/i.test(text)) {
-            return { answer: '是', reason: '' };
-        }
-        if (/^否|^不是|[\s,，。.!！?？]否|[\s,，。.!！?？]不是|no\b|false|wrong|incorrect/i.test(text)) {
-            return { answer: '否', reason: '' };
-        }
         return { answer: 'cannot_answer', reason: '' };
     }
 }

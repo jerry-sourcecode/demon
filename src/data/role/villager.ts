@@ -9,7 +9,7 @@ import { useEmitter } from "../../store/emit";
 import { allRoleKeys, randint, randpick, swap } from "@/utils/utils";
 import { ref } from "vue";
 import { logSkillResolution, logSkillActivate } from "../gameLog";
-import { callAi } from "@/utils/ai";
+import { callAi, callAiWithLoading } from "@/utils/ai";
 import { RoleMap, type RoleType } from "./index";
 import {
     Faction,
@@ -494,13 +494,17 @@ export const villagerRoles = {
                 }
                 if (!ans) ans = '没有找到::evil::。';
             } else {
-                const target = randpick(dataStore.charList(), 1, ch => !ch.isEvil()).items[0]!;
-                const cw = (target.id - c.id).wrap(sz);
-                const ccw = (c.id - target.id).wrap(sz);
-                if (cw < ccw) ans = '在你的顺时针方向。';
-                else if (ccw < cw) ans = '在你的逆时针方向。';
-                else ans = '与你距离相等。';
-                logSkillResolution(c.id, `由于神志不清，将 #${target.id} 视作::evil::。`);
+                // 异常：随机一名 kind 的方向
+                if (dataStore.charList().some(ch => !ch.isEvil())) {
+                    const target = randpick(dataStore.charList(), 1, ch => !ch.isEvil()).items[0]!;
+                    const cw = (target.id - c.id).wrap(sz);
+                    const ccw = (c.id - target.id).wrap(sz);
+                    if (cw < ccw) ans = '在你的顺时针方向。';
+                    else if (ccw < cw) ans = '在你的逆时针方向。';
+                    else ans = '与你距离相等。';
+                } else {
+                    ans = '没有找到::kind::。';
+                }
             }
             c.info.push(`离你最近的::evil::${ans}`);
         },
@@ -728,10 +732,8 @@ export const villagerRoles = {
                 ? '请给我一些能帮助善良阵营获胜（善良阵营获胜条件为：消灭所有邪恶玩家）的策略建议。不需要完全基于事实，这是说书人认为对渔夫最有利的行动指引。'
                 : '请给我一些误导性的、对善良阵营**有害的糟糕**建议。（善良阵营获胜条件为：消灭所有邪恶玩家）';
 
-            const answer = await callAi(
-                aiConfig.service,
-                aiConfig.apiKey,
-                aiConfig.model,
+            const answer = await callAiWithLoading(
+                aiConfig,
                 premise,
                 `作为说书人，给渔夫一些建议。\n${adviceGoal}`,
             );
@@ -1108,10 +1110,8 @@ export const villagerRoles = {
 
             const premise = buildHerbDoctorPremise(target, c.isAwake('HerbDoctor'));
 
-            const answer = await callAi(
-                aiConfig.service,
-                aiConfig.apiKey,
-                aiConfig.model,
+            const answer = await callAiWithLoading(
+                aiConfig,
                 premise,
                 `请为 #${target.id}（${RoleMap[targetRole].display}）生成一个与其能力${c.isAwake('HerbDoctor') ? '相关的' : '无关的，且若其存在伪装，最好和伪装相关的'}词语。`,
             );

@@ -1,5 +1,11 @@
 <template>
 	<div class="page">
+		<!-- 全局 AI 加载中（渔夫/郎中调用说书人时） -->
+		<n-spin
+			v-if="aiLoading"
+			size="large"
+			description="AI正在思考…"
+			class="ai-loading-overlay" />
 		<div ref="ringContainer" class="ring-container">
 			<!-- 环形中央 -->
 			<div class="ring-center" v-if="midDisplay">
@@ -746,6 +752,15 @@ emitter.on("question-done", (ok) => {
 	}
 });
 
+// ── 全局 AI 加载覆盖层（渔夫/郎中调用说书人时） ──
+
+const aiLoading = ref(false);
+
+emitter.off("ai-loading");
+emitter.on("ai-loading", (loading) => {
+	aiLoading.value = loading;
+});
+
 function confirmQuestion() {
 	const text = questionInput.value.trim();
 	if (!text) return;
@@ -767,6 +782,7 @@ onUnmounted(() => {
 		resizeObserver.disconnect();
 		resizeObserver = null;
 	}
+	emitter.off("ai-loading");
 });
 </script>
 
@@ -853,5 +869,15 @@ onUnmounted(() => {
 }
 .sheet-btn {
 	font-size: 16px;
+}
+/* 全局 AI 加载覆盖层（渔夫/郎中调用说书人时） */
+.ai-loading-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.45);
 }
 </style>

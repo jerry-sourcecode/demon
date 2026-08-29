@@ -30,6 +30,7 @@ export const useEmitter = defineStore('signals', () => {
         'confirm-weather-reroll': (weather: WeatherType) => Promise<boolean> | boolean;
         'show-weather': (weather: WeatherType) => Promise<void> | void;
         'question-done': (ok: boolean) => void;
+        'ai-loading': (loading: boolean) => void;
     }
 
     // 存储信号与回调函数的映射
