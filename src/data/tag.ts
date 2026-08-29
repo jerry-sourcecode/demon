@@ -39,7 +39,7 @@ export type TagType = typeof TagType[keyof typeof TagType];
  * - 新增标签：若不带 meta，仅需在 TagType 添加一行即可，无需改动这里。
  */
 export type TagMetaMap = {
-    dead: { type?: DeadReasonType; force?: boolean };
+    dead: { type?: DeadReasonType; force?: boolean; fromFrozen?: boolean };
     disguise: RoleType;
     gained: RoleType[];
     farmer: RoleType;
@@ -213,7 +213,8 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
                     logWeatherInfo(`守护救回了冻僵的 #${c.id}（来自 #${pid}）。`);
                     return;
                 }
-                c.addTag(TagType.dead, { source: tag.source, meta: { type: 'demon' } });
+                // 从冻僵转为死亡：标记 fromFrozen，避免再次触发极寒冻僵，但仍保留正常保护判定
+                c.addTag(TagType.dead, { source: tag.source, meta: { type: 'demon', fromFrozen: true } });
             }
         },
     },
@@ -235,8 +236,10 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             if (cloudyShieldDeath(c)) return false;
             // 天气判定
             const data = useDataStore();
+            // 从冻僵转为死亡时跳过再次冻僵（已在 frozen.afterRemove 中处理过保护/守护）
+            const fromFrozen = (tag.meta as { fromFrozen?: boolean } | undefined)?.fromFrozen ?? false;
             // 极寒：恶魔击杀的目标进入「冻僵」，死亡结算延迟到当天黄昏（可被净化/守护移除）
-            if (cause === 'demon' && data.weather === 'blizzard') {
+            if (cause === 'demon' && data.weather === 'blizzard' && !fromFrozen) {
                 c.addTag(TagType.frozen, { till: Time.makeTime(Time.getDay(data.time), Time.Phase.Dusk), source: 0 });
                 logWeatherInfo(`极寒：#${c.id} 被恶魔击杀，进入「冻僵」，死亡结算延迟到黄昏。`);
                 return false;
