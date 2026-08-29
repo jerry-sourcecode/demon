@@ -250,6 +250,16 @@ const entries = computed<InfoEntry[]>(() => {
 					text: meta.detail,
 				});
 				break;
+
+			case "announcement":
+				result.push({
+					id: event.id,
+					type: "announcement",
+					timeStr: t,
+					tag: "公告",
+					text: meta.detail,
+				});
+				break;
 		}
 	}
 	return result;

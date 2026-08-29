@@ -6,7 +6,7 @@ import { TagType, isProtected, makeProtect } from "../tag";
 import { type Character } from "../model";
 import { useDataStore } from "../../store/value";
 import { randint, randpick } from "@/utils/utils";
-import { logSkillResolution } from "../gameLog";
+import { logSkillResolution, logAnnouncement } from "../gameLog";
 import { Faction, Alignment, type IRole, playerData, nearestAlive, pickGood } from "./model";
 
 export const minionRoles = {
@@ -272,7 +272,7 @@ export const minionRoles = {
         display: '勒索者',
         faction: Faction.minion,
         summery: '“想要真相？先付代价。”',
-        ability: '每个夜晚，随机一名存活玩家：他第二天无法发动主动技能，也无法被处决。',
+        ability: '每个夜晚，随机一名存活玩家（可以是自己）：他第二天无法发动主动技能，也无法被处决。',
         abnormal: {
             overall: "不会有玩家被封锁。",
         },
@@ -285,8 +285,8 @@ export const minionRoles = {
                 logSkillResolution(c.id, '由于神志不清，技能未能生效。');
                 return;
             }
-            // 随机一名存活玩家（不含自己），次日无法发动主动技能、也无法被处决
-            const alive = dataStore.charList().filter(x => !x.isDead() && x.id !== c.id);
+            // 随机一名存活玩家，次日无法发动主动技能、也无法被处决
+            const alive = dataStore.charList().filter(x => !x.isDead());
             if (alive.length > 0) {
                 const target = randpick(alive).items[0]!;
                 target.addTag(TagType.blocked, {
@@ -294,6 +294,7 @@ export const minionRoles = {
                     source: c.id,
                 });
                 logSkillResolution(c.id, `勒索了 #${target.id}（::${target.role}::），他次日无法行动也无法被处决。`);
+                logAnnouncement(`#${target.id}（::${target.role}::）被勒索者封锁：次日无法发动主动技能，也无法被处决。`);
             }
         },
     }

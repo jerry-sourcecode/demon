@@ -890,6 +890,7 @@ const EVENT_LABELS: Record<string, string> = {
 	confusedChange: "混乱状态",
 	weatherChange: "天气改变",
 	weatherInfo: "天气信息",
+	announcement: "公告",
 };
 
 function formatEventTitle(event: GameEvent): string {
@@ -966,6 +967,8 @@ function formatEventDetail(event: GameEvent): string {
 				: `本局天气：${weatherName}`;
 		}
 		case "weatherInfo":
+			return meta.detail ?? "";
+		case "announcement":
 			return meta.detail ?? "";
 		default:
 			return "";

@@ -19,7 +19,8 @@ export type GameEventType =
     | 'gameEnd'
     | 'confusedChange'
     | 'weatherChange'
-    | 'weatherInfo';
+    | 'weatherInfo'
+    | 'announcement';
 
 // ── 各事件类型的 meta ──
 
@@ -103,6 +104,11 @@ interface WeatherInfoMeta {
     hidden?: boolean;
 }
 
+/** 公开公告（显示在信息面板，用于明确告知玩家某件事，如勒索者的目标） */
+interface AnnouncementMeta {
+    detail: string;
+}
+
 export type GameEventMeta =
     | GameStartMeta
     | PhaseChangeMeta
@@ -116,7 +122,8 @@ export type GameEventMeta =
     | GameEndMeta
     | ConfusedChangeMeta
     | WeatherChangeMeta
-    | WeatherInfoMeta;
+    | WeatherInfoMeta
+    | AnnouncementMeta;
 
 // ── 完整事件 ──
 
@@ -246,4 +253,9 @@ export function logWeatherInfo(detail: string): void {
 /** 记录一条天气日志（不显示在信息面板，仅用于复盘/诊断，如暴雨未命中） */
 export function logWeatherInfoHidden(detail: string): void {
     addLog('weatherInfo', 0, { detail, hidden: true });
+}
+
+/** 记录一条公开公告（显示在信息面板，明确告知玩家，如勒索者的目标） */
+export function logAnnouncement(detail: string): void {
+    addLog('announcement', 0, { detail });
 }
