@@ -99,6 +99,8 @@ interface WeatherChangeMeta {
 
 interface WeatherInfoMeta {
     detail: string;
+    /** 为 true 时不在信息面板显示（仅用于复盘/诊断） */
+    hidden?: boolean;
 }
 
 export type GameEventMeta =
@@ -239,4 +241,9 @@ export function logWeatherChange(weather: WeatherType, action: 'roll' | 'reroll'
 /** 记录一条天气告知信息（如雷暴揭示、双子月线索、血月选择等，显示在信息面板） */
 export function logWeatherInfo(detail: string): void {
     addLog('weatherInfo', 0, { detail });
+}
+
+/** 记录一条天气日志（不显示在信息面板，仅用于复盘/诊断，如暴雨未命中） */
+export function logWeatherInfoHidden(detail: string): void {
+    addLog('weatherInfo', 0, { detail, hidden: true });
 }

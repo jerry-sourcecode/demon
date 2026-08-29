@@ -14,7 +14,7 @@ import { useDataStore } from "./store/value";
 import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
 import { TagType } from "./data/tag";
-import { logGameStart, logGameEnd, logSkillResolution, logWeatherInfo } from "./data/gameLog";
+import { logGameStart, logGameEnd, logSkillResolution, logWeatherInfo, logWeatherInfoHidden } from "./data/gameLog";
 import { playerRoles, PlayerRoleType } from "./data/role/player";
 import type { MatchConfig } from "./data/match";
 
@@ -144,13 +144,15 @@ function applyDuskWeather(dataStore: ReturnType<typeof useDataStore>) {
         });
     }
     // 暴雨：每个 dusk，30% 概率一名存活的善良玩家 drunk 到下一个 dusk
-    if (w === 'rainstorm' && Math.random() < 0.3) {
+    if (w === 'rainstorm') {
         const kinds = dataStore.charList().filter(x => !x.isTrulyEvil() && !x.isDead());
-        if (kinds.length > 0) {
+        if (Math.random() < 0.3) {
             const target = randpick(kinds).items[0]!;
             const till = Time.makeTime(Time.getDay(dataStore.time) + 1, Time.Phase.Dusk);
             target.addTag(TagType.confused, { till, source: 0 });
             logSkillResolution(target.id, `暴雨：你被::drunk::直到下一个::dusk::。`);
+        } else {
+            logWeatherInfoHidden(`暴雨倾盆，但无人被::drunk::。`);
         }
     }
 }

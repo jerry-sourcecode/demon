@@ -241,6 +241,7 @@ const entries = computed<InfoEntry[]>(() => {
 				break;
 
 			case "weatherInfo":
+				if (meta.hidden) break;
 				result.push({
 					id: event.id,
 					type: "weather",

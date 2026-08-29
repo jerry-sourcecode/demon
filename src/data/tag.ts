@@ -3,7 +3,7 @@ import { Time } from "../utils/time";
 import { RoleMap, type Character, type DeadReasonType, type RoleType } from "./model";
 import { NIGHT_CAUSES } from "./constants";
 import { useDataStore } from "@/store/value";
-import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution, logConfusedChange, logWeatherInfo, logWeatherChange } from "./gameLog";
+import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution, logConfusedChange, logWeatherInfo, logWeatherChange, logWeatherInfoHidden } from "./gameLog";
 
 export const TagType = {
     /** 死亡 */
@@ -155,16 +155,14 @@ export function settleDeath(c: Character, tg: ITag): void {
     logDeath(c.id, type);
     // 月食：仅夜间死亡（恶魔/爪牙等夜间死因）不产生声望降低
     const eclipseNight = data.weather === 'eclipse' && NIGHT_CAUSES.includes(type);
-    if (!c.isEvil() && !eclipseNight) {
-        data.reputation -= 2;
+    // 以真实阵营判定（tempted/隐士仅影响信息，不应影响声望结算）
+    if (!c.isTrulyEvil() && !eclipseNight) {
+        // 处决 -5，死于非命 -2（修复：此前 -3 只加在日志 delta，未真正扣除）
+        const penalty = type === 'execute' ? 5 : 2;
+        data.reputation -= penalty;
         repDelta = data.reputation - repBefore;
-        if (type === 'execute') {
-            repDelta -= 3;
-            logReputationChange(repDelta, `#${c.id} 被处决`);
-        } else {
-            logReputationChange(repDelta, `#${c.id} 死于非命`);
-        }
-    } else if (!c.isEvil()) {
+        logReputationChange(repDelta, type === 'execute' ? `#${c.id} 被处决` : `#${c.id} 死于非命`);
+    } else if (!c.isTrulyEvil()) {
         logWeatherInfo(`#${c.id} 死于夜晚，但月食豁免了声望降低。`);
     }
 
@@ -245,7 +243,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             }
             // 暴雨：恶魔击杀有 40% 概率失败（痕迹被冲刷）
             if (cause === 'demon' && data.weather === 'rainstorm' && randint(1, 100) <= 40) {
-                logWeatherInfo(`暴雨冲刷了痕迹，恶魔的对 #${c.id} 的击杀失败了。`);
+                logWeatherInfoHidden(`暴雨冲刷了痕迹，恶魔的对 #${c.id} 的击杀失败了。`);
                 return false;
             }
             return true;

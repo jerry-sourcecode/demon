@@ -443,9 +443,10 @@ export const villagerRoles = {
             return true;
         },
     },
-    Empress: {
-        display: '女皇',
+    Noble: {
+        display: '贵族',
         faction: Faction.villager,
+        summery: "“讽刺的确是最不足挂齿的机智。尽管如此，先生，回应你的批评，就是一种机智。”",
         ability: '::recall::时，你会得知三名玩家，其中有且仅有一人是::evil::。',
         abnormal: {
             overall: "你会得知三名::kind::。"
@@ -453,7 +454,7 @@ export const villagerRoles = {
         onRecall(c) {
             const ans = [];
             const dataStore = useDataStore();
-            if (c.isAwake('Empress')) {
+            if (c.isAwake('Noble')) {
                 ans.push(...randpick(dataStore.charList(), 2, (it) => !it.isEvil()).items);
                 ans.push(...randpick(dataStore.charList(), 1, (it) => it.isEvil()).items);
             } else {
@@ -493,17 +494,13 @@ export const villagerRoles = {
                 }
                 if (!ans) ans = '没有找到::evil::。';
             } else {
-                // 异常：随机一名 kind 的方向
-                if (dataStore.charList().some(ch => !ch.isEvil())) {
-                    const target = randpick(dataStore.charList(), 1, ch => !ch.isEvil()).items[0]!;
-                    const cw = (target.id - c.id).wrap(sz);
-                    const ccw = (c.id - target.id).wrap(sz);
-                    if (cw < ccw) ans = '在你的顺时针方向。';
-                    else if (ccw < cw) ans = '在你的逆时针方向。';
-                    else ans = '与你距离相等。';
-                } else {
-                    ans = '没有找到::kind::。';
-                }
+                const target = randpick(dataStore.charList(), 1, ch => !ch.isEvil()).items[0]!;
+                const cw = (target.id - c.id).wrap(sz);
+                const ccw = (c.id - target.id).wrap(sz);
+                if (cw < ccw) ans = '在你的顺时针方向。';
+                else if (ccw < cw) ans = '在你的逆时针方向。';
+                else ans = '与你距离相等。';
+                logSkillResolution(c.id, `由于神志不清，将 #${target.id} 视作::evil::。`);
             }
             c.info.push(`离你最近的::evil::${ans}`);
         },
