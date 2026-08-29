@@ -54,7 +54,7 @@ export const playerRoles: Record<PlayerRoleType, IPlayerRole> = {
             c.useSkill('lleechHost');
 
             // 痢蛭真实存在且清醒时，命中宿主 → 宿主死亡
-            const canKill = !!lleech && !lleech.hasTag(TagType.dead) && lleech.isAwake('Lleech');
+            const canKill = !!lleech && !lleech.isDead() && lleech.isAwake('Lleech');
             const hostId = lleech ? playerData.get(lleech.id) : undefined;
             if (canKill && hostId && obj.id === hostId) {
                 logSkillResolution(lleech.id, `宿主 #${hostId}（::${obj.role}::）被玩家杀死。`);

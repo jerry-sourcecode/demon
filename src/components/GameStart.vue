@@ -65,6 +65,17 @@
 						游戏
 					</template>
 					<div class="config-body">
+						<!-- 人数配置预设模板 -->
+						<div class="preset-row">
+							<n-button
+								v-for="p in CONFIG_PRESETS"
+								:key="p.label"
+								size="small"
+								class="preset-btn"
+								@click="applyPreset(p)">
+								{{ p.label }}
+							</n-button>
+						</div>
 						<div class="count-grid">
 							<div class="count-item">
 								<span class="count-label">镇民</span>
@@ -330,6 +341,84 @@ const totalPlayers = computed(
 		localConfig.value.demon,
 );
 
+// ── 人数配置预设模板（a镇民 b外来 c爪牙 d恶魔，+a/b 为行动力/声望） ──
+interface ConfigPreset {
+	label: string;
+	config: MatchConfig;
+}
+const CONFIG_PRESETS: ConfigPreset[] = [
+	{
+		label: "新手 6人",
+		config: {
+			villager: 5,
+			outsider: 0,
+			minion: 0,
+			demon: 1,
+			actionPoints: 6,
+			reputation: 9,
+		},
+	},
+	{
+		label: "简单 7人",
+		config: {
+			villager: 5,
+			outsider: 0,
+			minion: 1,
+			demon: 1,
+			actionPoints: 7,
+			reputation: 11,
+		},
+	},
+	{
+		label: "标准 8人",
+		config: {
+			villager: 5,
+			outsider: 1,
+			minion: 1,
+			demon: 1,
+			actionPoints: 8,
+			reputation: 13,
+		},
+	},
+	{
+		label: "推荐 10人",
+		config: {
+			villager: 6,
+			outsider: 1,
+			minion: 2,
+			demon: 1,
+			actionPoints: 10,
+			reputation: 15,
+		},
+	},
+	{
+		label: "专家 12人",
+		config: {
+			villager: 7,
+			outsider: 2,
+			minion: 2,
+			demon: 1,
+			actionPoints: 12,
+			reputation: 17,
+		},
+	},
+	{
+		label: "终局 14人",
+		config: {
+			villager: 8,
+			outsider: 3,
+			minion: 2,
+			demon: 1,
+			actionPoints: 13,
+			reputation: 19,
+		},
+	},
+];
+
+function applyPreset(preset: ConfigPreset) {
+	localConfig.value = { ...preset.config };
+}
+
 function onConfigApply() {
 	const config: MatchConfig = { ...localConfig.value };
 	matchStore.setMatchConfig(config);
@@ -460,6 +549,14 @@ function onPasteImport() {
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
+}
+.preset-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.preset-btn {
+	flex: 1 1 auto;
 }
 .count-grid {
 	display: grid;

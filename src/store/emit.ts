@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue';
 import type { Character } from '../data/model';
+import type { WeatherType } from '../data/weather';
 
 /** 玩家选取配置 */
 export interface SelectPlayerOptions {
@@ -26,6 +27,9 @@ export const useEmitter = defineStore('signals', () => {
         'game-end': (res: boolean) => void;
         'ask-question': (options?: { info?: string }) => Promise<string | null>;
         'show-message': (options: { type: 'warning' | 'info'; content: string }) => Promise<void>;
+        'confirm-weather-reroll': (weather: WeatherType) => Promise<boolean> | boolean;
+        'show-weather': (weather: WeatherType) => Promise<void> | void;
+        'question-done': (ok: boolean) => void;
     }
 
     // 存储信号与回调函数的映射

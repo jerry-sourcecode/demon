@@ -68,6 +68,24 @@
 					<AbilityMd :markdown="RULES_MARKDOWN" />
 				</div>
 			</n-tab-pane>
+
+			<!-- Tab 3: 天气 -->
+			<n-tab-pane name="weather" tab="天气">
+				<div class="weather-body">
+					<div
+						v-for="key in WEATHER_LIST"
+						:key="key"
+						class="weather-item">
+						<div class="weather-item-title">
+							{{ WeatherMap[key].icon }}
+							{{ WeatherMap[key].display }}
+						</div>
+						<AbilityMd
+							class="weather-item-desc"
+							:markdown="WeatherMap[key].desc" />
+					</div>
+				</div>
+			</n-tab-pane>
 		</n-tabs>
 
 		<!-- 角色详情弹窗（复用 Detail） -->
@@ -82,6 +100,7 @@ import { RoleMap, Faction, type RoleType } from "@/data/model";
 import { allRoleKeys } from "@/utils/utils";
 import { FACTION_COLORS, KEYWORD_DICT } from "@/data/keywords";
 import { RULES_MARKDOWN } from "@/data/rules";
+import { WeatherMap, WEATHER_LIST } from "@/data/weather";
 import AbilityMd from "./AbilityMd.vue";
 import AbilityPopover from "./AbilityPopover.vue";
 import Detail from "./Detail.vue";
@@ -125,10 +144,23 @@ function onSelectRole(r: RoleType) {
 
 <style scoped>
 .encyclopedia-body,
-.rules-body {
+.rules-body,
+.weather-body {
 	max-height: 56vh;
 	overflow-y: auto;
 	padding-right: 8px;
+}
+.weather-item {
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border: 1px solid #e5e5e5;
+	border-radius: 8px;
+	background: #fafafa;
+}
+.weather-item-title {
+	font-size: 15px;
+	font-weight: 700;
+	margin-bottom: 4px;
 }
 .faction-group {
 	margin-bottom: 12px;

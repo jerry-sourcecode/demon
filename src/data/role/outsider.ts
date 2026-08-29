@@ -33,7 +33,7 @@ export const outsiderRoles = {
         abnormal: {
             overall: "即使你被处决，::kind::阵营也不会落败。"
         },
-        onExecuted(c) {
+        beforeExecuted(c) {
             if (c.isAwake('Saint')) {
                 logGameEnd(false, '圣徒被处决，::kind::阵营落败');
                 const emitter = useEmitter();
@@ -56,7 +56,7 @@ export const outsiderRoles = {
                 emitter.emit('select-player', {
                     required: true,
                     filter(c) {
-                        return !c.hasTag(TagType.dead);
+                        return !c.isDead();
                     },
                     info: '::Moonchild::：选择一名玩家，若他是::kind::，他死亡。'
                 })

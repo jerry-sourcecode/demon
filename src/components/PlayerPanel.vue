@@ -148,21 +148,65 @@
 			<p v-if="questionInfo" style="margin-bottom: 12px; color: #aaa">
 				{{ questionInfo }}
 			</p>
-			<n-input
-				v-model:value="questionInput"
-				type="textarea"
-				rows="3"
-				placeholder="请输入一个是非问题..."
-				@keydown.enter.ctrl="confirmQuestion" />
+			<n-spin :show="questionLoading">
+				<n-input
+					v-model:value="questionInput"
+					type="textarea"
+					rows="3"
+					:disabled="questionLoading"
+					placeholder="请输入一个是非问题..."
+					@keydown.enter.ctrl="confirmQuestion" />
+			</n-spin>
 			<template #footer>
-				<n-button @click="cancelQuestion" style="margin-right: 10px">
+				<n-button
+					:disabled="questionLoading"
+					@click="cancelQuestion"
+					style="margin-right: 10px">
 					取消
 				</n-button>
 				<n-button
 					type="primary"
-					:disabled="!questionInput.trim()"
+					:disabled="!questionInput.trim() || questionLoading"
 					@click="confirmQuestion">
 					询问
+				</n-button>
+			</template>
+		</n-modal>
+
+		<!-- 天气弹窗（重掷确认 / 重铸后介绍 共用） -->
+		<n-modal
+			v-model:show="showWeatherModal"
+			preset="card"
+			:title="
+				weatherModalInfo
+					? `天气：${weatherModalInfo.icon} ${weatherModalInfo.display}`
+					: '天气'
+			"
+			style="max-width: 420px; width: 80vw"
+			:mask-closable="false">
+			<p v-if="weatherModalInfo" style="margin-bottom: 8px">
+				{{
+					weatherModalMode === "intro"
+						? "重铸后的本局天气为"
+						: "本局天气为"
+				}}「{{ weatherModalInfo.display }}」：
+			</p>
+			<AbilityMd
+				v-if="weatherModalInfo"
+				:markdown="weatherModalInfo.desc" />
+			<template #footer>
+				<template v-if="weatherModalMode === 'reroll'">
+					<n-button
+						@click="cancelWeatherReroll"
+						style="margin-right: 10px">
+						保持
+					</n-button>
+					<n-button type="primary" @click="confirmWeatherReroll">
+						重掷（消耗 {{ REROLL_WEATHER_COST }} 声望）
+					</n-button>
+				</template>
+				<n-button v-else type="primary" @click="confirmWeatherIntro">
+					确定
 				</n-button>
 			</template>
 		</n-modal>
@@ -193,10 +237,16 @@ import {
 	NInput,
 	NModal,
 	NDropdown,
+	NSpin,
 	useMessage,
 	type DropdownOption,
 } from "naive-ui";
 import { ACTION_COST, useDataStore } from "@/store/value.ts";
+import {
+	WeatherMap,
+	REROLL_WEATHER_COST,
+	type WeatherType,
+} from "@/data/weather";
 import { useEmitter } from "@/store/emit.ts";
 import { Faction, type Character } from "@/data/model";
 import { Time } from "@/utils/time";
@@ -254,8 +304,8 @@ const midText = ref("");
 const midDoneBtn = ref(false);
 
 // 由容器尺寸推导的布局参数
-const RADIUS_X = computed(() => containerWidth.value * 0.35);
-const RADIUS_Y = computed(() => containerHeight.value * 0.35);
+const RADIUS_X = computed(() => containerWidth.value * 0.38);
+const RADIUS_Y = computed(() => containerHeight.value * 0.4);
 
 const STAGGER_DELAY = 80;
 
@@ -303,6 +353,68 @@ const updateContainerSize = () => {
 };
 
 const emitter = useEmitter();
+
+// ── 天气弹窗（重掷确认 / 重铸后介绍 共用） ──
+const showWeatherModal = ref(false);
+const weatherModalMode = ref<"reroll" | "intro">("reroll");
+const weatherModalKey = ref<WeatherType | null>(null);
+let weatherRerollResolve: ((val: boolean) => void) | null = null;
+let weatherIntroResolve: (() => void) | null = null;
+const weatherModalInfo = computed(() => {
+	const key = weatherModalKey.value;
+	return key ? WeatherMap[key] : null;
+});
+
+emitter.off("confirm-weather-reroll");
+emitter.on("confirm-weather-reroll", (weather) => {
+	weatherModalMode.value = "reroll";
+	weatherModalKey.value = weather;
+	return new Promise<boolean>((resolve) => {
+		weatherRerollResolve = resolve;
+		showWeatherModal.value = true;
+	});
+});
+
+emitter.off("show-weather");
+emitter.on("show-weather", (weather) => {
+	weatherModalMode.value = "intro";
+	weatherModalKey.value = weather;
+	return new Promise<void>((resolve) => {
+		weatherIntroResolve = resolve;
+		showWeatherModal.value = true;
+	});
+});
+
+function confirmWeatherReroll() {
+	showWeatherModal.value = false;
+	weatherRerollResolve?.(true);
+	weatherRerollResolve = null;
+}
+
+function cancelWeatherReroll() {
+	showWeatherModal.value = false;
+	weatherRerollResolve?.(false);
+	weatherRerollResolve = null;
+}
+
+function confirmWeatherIntro() {
+	showWeatherModal.value = false;
+	weatherIntroResolve?.();
+	weatherIntroResolve = null;
+}
+
+// 监听弹窗关闭（点击 X / 遮罩），重掷模式视为保持，介绍模式直接结束
+watch(showWeatherModal, (val) => {
+	if (!val) {
+		if (weatherModalMode.value === "reroll" && weatherRerollResolve) {
+			weatherRerollResolve(false);
+			weatherRerollResolve = null;
+		} else if (weatherModalMode.value === "intro" && weatherIntroResolve) {
+			weatherIntroResolve();
+			weatherIntroResolve = null;
+		}
+	}
+});
 
 onMounted(() => {
 	updateContainerSize();
@@ -409,6 +521,8 @@ onUnmounted(() => {
 	emitter.off("select-player");
 	emitter.off("show-message");
 	emitter.off("ask-question");
+	emitter.off("confirm-weather-reroll");
+	emitter.off("show-weather");
 });
 
 // ── 游戏结束 ──
@@ -598,6 +712,7 @@ emitter.on("show-message", (options) => {
 const showQuestionDialog = ref(false);
 const questionInput = ref("");
 const questionInfo = ref("");
+const questionLoading = ref(false);
 let questionResolve: ((text: string | null) => void) | null = null;
 
 // 监听对话框关闭（点击 X 按钮），视为取消
@@ -606,11 +721,13 @@ watch(showQuestionDialog, (val) => {
 		questionResolve(null);
 		questionResolve = null;
 	}
+	questionLoading.value = false;
 });
 
 emitter.off("ask-question");
 emitter.on("ask-question", (options) => {
 	questionInfo.value = options?.info ?? "";
+	questionLoading.value = false;
 	return new Promise<string | null>((resolve) => {
 		showQuestionDialog.value = true;
 		questionInput.value = "";
@@ -619,11 +736,24 @@ emitter.on("ask-question", (options) => {
 	});
 });
 
+// AI 回复结束：ok=true 关闭弹窗；ok=false（无法回答）恢复输入继续提问
+emitter.off("question-done");
+emitter.on("question-done", (ok) => {
+	questionLoading.value = false;
+	if (ok) {
+		showQuestionDialog.value = false;
+		questionResolve = null;
+	}
+});
+
 function confirmQuestion() {
 	const text = questionInput.value.trim();
-	showQuestionDialog.value = false;
-	questionResolve?.(text || null);
+	if (!text) return;
+	// 提交后不立即关闭，显示加载圆环等待 AI 回复
+	questionLoading.value = true;
+	const r = questionResolve;
 	questionResolve = null;
+	r?.(text || null);
 }
 
 function cancelQuestion() {

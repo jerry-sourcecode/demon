@@ -54,8 +54,10 @@ export interface IRole extends RoleHooks<Character> {
     afterTagAdd?: (c: Character, tg: ITag) => void;
     /** 被移除 Tag 时触发，返回 false 阻止移除 */
     onTagRemove?: (c: Character, tg: ITag) => boolean;
-    /** 被处决时触发，返回 false 阻止处决 */
-    onExecuted?: (c: Character) => boolean;
+    /** 被处决前触发，返回 false 阻止处决 */
+    beforeExecuted?: (c: Character) => boolean;
+    /** 被处决后触发 */
+    afterExecuted?: (c: Character) => void;
     /** 调整初始阵营数量显示（如男爵 +2 外来者 -2 镇民） */
     onAdjustCounts?: (counts: { villager: number; outsider: number }) => void;
 }
@@ -94,7 +96,7 @@ export function resetRoleStore(): void {
 
 /** 获取所有存活玩家 */
 export function getAliveChars(): Character[] {
-    return useDataStore().charList().filter(x => !x.hasTag(TagType.dead));
+    return useDataStore().charList().filter(x => !x.isDead());
 }
 
 /** 玩家查询选项（阵营 / 善良 / 邪恶通用） */
@@ -118,8 +120,8 @@ export function getFactionChars(
     let list = useDataStore().charList().filter(
         x => set.has(x.getRoleDetail().faction) && x.id !== opts.exclude?.id,
     );
-    if (opts.alive) list = list.filter(x => !x.hasTag(TagType.dead));
-    if (opts.deadOnly) list = list.filter(x => x.hasTag(TagType.dead));
+    if (opts.alive) list = list.filter(x => !x.isDead());
+    if (opts.deadOnly) list = list.filter(x => x.isDead());
     if (opts.count !== undefined) list = randpick(list, opts.count).items;
     return list;
 }
@@ -138,8 +140,8 @@ export function getGoodChars(
     let list = useDataStore().charList().filter(
         x => matchGood(x) && x.id !== opts.exclude?.id,
     );
-    if (opts.alive) list = list.filter(x => !x.hasTag(TagType.dead));
-    if (opts.deadOnly) list = list.filter(x => x.hasTag(TagType.dead));
+    if (opts.alive) list = list.filter(x => !x.isDead());
+    if (opts.deadOnly) list = list.filter(x => x.isDead());
     if (opts.count !== undefined) list = randpick(list, opts.count).items;
     return list;
 }
@@ -152,8 +154,8 @@ export function getEvilChars(
     let list = useDataStore().charList().filter(
         x => matchEvil(x) && x.id !== opts.exclude?.id,
     );
-    if (opts.alive) list = list.filter(x => !x.hasTag(TagType.dead));
-    if (opts.deadOnly) list = list.filter(x => x.hasTag(TagType.dead));
+    if (opts.alive) list = list.filter(x => !x.isDead());
+    if (opts.deadOnly) list = list.filter(x => x.isDead());
     if (opts.count !== undefined) list = randpick(list, opts.count).items;
     return list;
 }
@@ -209,7 +211,7 @@ export function nearestAlive(c: Character, dir: 'cw' | 'ccw'): Character | undef
     for (let i = 1; i <= maxDist; i++) {
         const id = dir === 'cw' ? (c.id + i).wrap(sz) : (c.id - i).wrap(sz);
         const ch = dataStore.chars.get(id);
-        if (ch && !ch.hasTag(TagType.dead)) return ch;
+        if (ch && !ch.isDead()) return ch;
     }
     return undefined;
 }
@@ -301,11 +303,11 @@ export function cryptoRevealEvil(c: Character): boolean {
     const evil = randpick(
         dataStore.charList(),
         1,
-        e => e.isEvil() && !e.hasTag(TagType.dead) && e.id !== c.id,
+        e => e.isEvil() && !e.isDead() && e.id !== c.id,
     ).items[0] ?? randpick(
         dataStore.charList(),
         1,
-        e => e.isEvil() && !e.hasTag(TagType.dead),
+        e => e.isEvil() && !e.isDead(),
     ).items[0];
     if (!evil) return false;
     c.info.push(`#${evil.id} 是${RoleMap[evil.role].display}。`);
@@ -421,7 +423,7 @@ export function buildGameStatePremise(): string {
     for (const [id, c] of chars) {
         const role = RoleMap[c.role];
         const tags: string[] = [];
-        if (c.hasTag(TagType.dead)) tags.push('已死亡');
+        if (c.isDead()) tags.push('已死亡');
         if (c.hasTag(TagType.confused)) tags.push('神志不清（中毒/醉酒）');
         if (c.hasTag(TagType.disguise)) {
             const dis = c.getTag(TagType.disguise)[0];

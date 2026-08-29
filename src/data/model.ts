@@ -1,12 +1,12 @@
 import { Time } from "../utils/time";
-import { TagType, type ITag, type ProtectFn } from "./tag";
-import { TAG_RULES } from "./tag";
+import { TagType, type ITag, type TagMetaMap } from "./tag";
+import { TAG_RULES, beforeExecuted, afterExecuted, settleDeath } from "./tag";
 import type { IRole } from "./roles";
 import { RoleMap } from "./roles";
 import type { RoleType } from "./roles";
 import { Faction, Alignment } from "./roles";
 import { useDataStore } from "../store/value";
-import { allRoleKeys, randpick } from "@/utils/utils";
+import { allRoleKeys, randpick, runFn } from "@/utils/utils";
 import type { PlayerRoleType } from "./role/player";
 
 export type { IRole, RoleType } from "./roles";
@@ -16,30 +16,14 @@ export { RoleMap, Faction, Alignment, resetRoleStore } from "./roles";
 
 export type DeadReasonType = 'other' | 'night' | 'execute' | 'demon' | 'assassin' | 'moonchild' | 'slayer';
 
-/** 各 Tag 的 meta 类型映射 */
-interface TagMetaMap {
-    dead: { type?: DeadReasonType };
-    dying: { force?: boolean; type?: DeadReasonType }
-    confused: undefined;
-    disguise: RoleType;
-    /** 获得的能力（亡骨魔保留爪牙 / 双面人获得镇民能力） */
-    gained: RoleType[];
-    farmer: RoleType;
-    recall: undefined;
-    grandson: undefined;
-    executed: undefined;
-    unfavored: undefined;
-    /** 保护（处决免疫 / 和平主义者 / 夜间守护），meta 为死因判定回调 */
-    protect: ProtectFn;
-    alive: undefined;
-}
-
 /** Tag 精确类型（discriminated union，meta 随 type 自动收窄） */
 type TypedTag<T extends TagType = TagType> = {
     [K in T]: {
         type: K;
         till: Time.TimeNumber;
         source?: number;
+        /** 生效时间：标签延迟到该时间才生效。缺省=立即生效；到点前视为未生效 */
+        at?: Time.TimeNumber;
     } & ([TagMetaMap[K]] extends [undefined]
         ? { meta?: undefined }
         : { meta: TagMetaMap[K] })
@@ -136,13 +120,50 @@ export class Character extends BaseCharacter {
         return this.hasTag(TagType.recall);
     }
 
+    /** 是否已死亡（dead 标签的死亡生效时间 at 已到）。延期死亡（at 在未来）视为存活 */
+    isDead(): boolean {
+        const now = useDataStore().time;
+        return this.getTag(TagType.dead).some(t => (t.at ?? 0) <= now);
+    }
+
+    /** 是否真正死亡：isDead() 且非活死人（僵怖活死人被判为存活） */
+    isTrulyDead(): boolean {
+        return this.isDead() && !this.hasTag(TagType.alive);
+    }
+
+    /** 结算「at 恰好等于当前时间」的延期死亡（相位推进时结算一次，天然保证只死一次） */
+    settlePendingDeaths(): void {
+        const now = useDataStore().time;
+        for (const t of this.getTag(TagType.dead)) {
+            if ((t.at ?? 0) === now) settleDeath(this, t);
+        }
+    }
+
+    /**
+     * 处决这名玩家：
+     * 1. 全局 beforeExecuted（保护判定）
+     * 2. 角色 beforeExecuted（原 onExecuted）
+     * 3. 附上 dead 标签（处决死因）
+     * 4. 角色 afterExecuted
+     * 5. 全局 afterExecuted
+     */
+    execute(): void {
+        if (beforeExecuted(this) === false) return;
+        if (runFn(RoleMap[this.role]?.beforeExecuted, this) === false) return;
+        this.addTag(TagType.dead, { meta: { type: 'execute' } });
+        runFn(RoleMap[this.role]?.afterExecuted, this);
+        afterExecuted(this);
+    }
+
     getRoleDetail() {
         return RoleMap[this.role];
     }
 
-    /** 判断是否为邪恶阵营（含清醒的陌客） */
+    /** 判断是否为邪恶阵营（含清醒的陌客、蛊惑者的迷惑标记） */
     isEvil(): boolean {
-        return this.alignment === Alignment.evil || (this.role === 'Recluse' && this.isAwake('Recluse'));
+        return this.alignment === Alignment.evil
+            || this.hasTag(TagType.tempted)
+            || (this.role === 'Recluse' && this.isAwake('Recluse'));
     }
 
     /** 真正的邪恶（仅按 alignment 判断） */
@@ -159,7 +180,7 @@ export class Character extends BaseCharacter {
     /** 添加 Tag，默认永久。meta 类型根据 type 自动推导 */
     addTag<T extends TagType>(
         type: T,
-        opts?: { till?: Time.TimeNumber; count?: number; source?: number; force?: boolean }
+        opts?: { till?: Time.TimeNumber; at?: Time.TimeNumber; count?: number; source?: number; force?: boolean }
             & ([TagMetaMap[T]] extends [undefined] ? { meta?: undefined } : { meta?: TagMetaMap[T] }),
     ): void {
         const till = opts?.till ?? Time.FAR_FUTURE;
@@ -168,7 +189,7 @@ export class Character extends BaseCharacter {
         const roleDef: IRole = RoleMap[this.role]!;
         const rule = TAG_RULES[type];
         for (let i = 0; i < count; i++) {
-            const tg = { type, till, source: opts?.source, meta: opts?.meta } as TypedTag<T>;
+            const tg = { type, till, source: opts?.source, at: opts?.at, meta: opts?.meta } as TypedTag<T>;
             if (!force && roleDef.beforeTagAdd?.(this, tg) === false) continue;
             if (!force && rule?.beforeAdd?.(this, tg) === false) continue;
             this.tags.push(tg);
@@ -263,7 +284,7 @@ export function pickKindPreferVillager(chars: Character[], count: number = 1, fi
     const used = new Set<number>();
 
     // 优先村民（带 unfavored 标记的玩家——痢蛭宿主/狐媚娘魅惑目标——按外来者同级处理，不进入优先梯队）
-    const villagers = shuffle(chars.filter(x => !x.hasTag(TagType.unfavored) && x.getRoleDetail().faction === Faction.villager && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
+    const villagers = shuffle(chars.filter(x => !x.hasTag(TagType.unfavored) && x.getRoleDetail().faction === Faction.villager && !x.isDead() && filter(x)));
     for (const v of villagers) {
         if (result.length >= count) break;
         result.push(v);
@@ -272,7 +293,7 @@ export function pickKindPreferVillager(chars: Character[], count: number = 1, fi
 
     // 不足则取其他善良
     if (result.length < count) {
-        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isTrulyEvil() && !x.hasTag(TagType.dead, TagType.dying) && filter(x)));
+        const others = shuffle(chars.filter(x => !used.has(x.id) && !x.isTrulyEvil() && !x.isDead() && filter(x)));
         for (const o of others) {
             if (result.length >= count) break;
             result.push(o);

@@ -2,15 +2,13 @@ import { defineStore } from 'pinia'
 import { RoleMap, Faction, type Character, type RoleType, PlayerCharacter } from '../data/model'
 import { ref, type Ref, computed } from 'vue';
 import { Time } from '../utils/time';
+import { randint } from '../utils/utils';
 import { TagType } from '../data/tag';
-import { gameLog as getLog, clearLog, setLog, type GameEvent, logPhaseChange } from '../data/gameLog';
+import { gameLog as getLog, clearLog, setLog, type GameEvent, logPhaseChange, logWeatherChange, logReputationChange } from '../data/gameLog';
+import { WeatherType, randWeather, REROLL_WEATHER_COST } from '../data/weather';
 import type { MatchConfig } from '../data/match';
 import { saveGame as saveToStorage, loadGame as loadFromStorage, hasSaveGame as hasSaveInStorage, deleteSave as removeSave, deserializeChars } from '../data/save';
-export const ACTION_COST = {
-    skill: 2,
-    execute: 3,
-    recall: 2,
-} as const;
+export { ACTION_COST } from '../data/constants';
 
 export const useDataStore = defineStore('data', () => {
     const chars: Ref<Map<number, Character>> = ref(new Map);
@@ -25,12 +23,39 @@ export const useDataStore = defineStore('data', () => {
     const actionPoints = ref(10);
     const maxActionPoints = ref(10);
 
+    /** 当前天气（每局固定一个，开局随机，可重掷一次） */
+    const weather = ref<WeatherType | null>(null);
+    /** 是否已使用重掷机会 */
+    const weatherRerolled = ref(false);
+    /** 浓雾降临的黄昏天数（开局随机 1~4，0=未定） */
+    const fogDuskDay = ref(0);
+    /** 雷暴每局限一次的错误揭示是否已用 */
+    const thunderWrongUsed = ref(false);
+    /** 雷暴当晚被震慑的玩家 id */
+    const thunderTargetId = ref<number | null>(null);
+    /** 酷暑：今天是否已使用免费处决 */
+    const heatwaveFreeUsed = ref(false);
+    /** 今天白天是否已发动过主动技能 */
+    const daySkillUsed = ref(false);
+    /** 血月：今天是否已使用 */
+    const bloodmoonUsedToday = ref(false);
+    /** 流星雨：今天是否已使用 */
+    const meteorUsedToday = ref(false);
+    /** 流星雨：今天是否被禁用（昨日误伤） */
+    const meteorDisabledToday = ref(false);
+    /** 流星雨：下个白天是否被禁用（今日误伤） */
+    const meteorDisabledNextDay = ref(false);
+    /** 多云：天选者玩家 id（始终保持清醒，可挡一次死亡） */
+    const cloudyChosenId = ref<number | null>(null);
+    /** 多云：天选者是否已挡过一次死亡（之后永久中毒） */
+    const cloudyChosenDied = ref(false);
+
     const gameOver = ref(false);
 
     /** 尚存活的真正邪恶角色（仅恶魔和爪牙，陌客不算） */
     const evilAlive = computed(() =>
         [...chars.value.values()].filter(c =>
-            c.isTrulyEvil() && (!c.hasTag(TagType.dead) || c.hasTag(TagType.alive))
+            c.isTrulyEvil() && !c.isTrulyDead()
         )
     );
 
@@ -147,7 +172,51 @@ export const useDataStore = defineStore('data', () => {
     }
 
     function resetActionPoints() {
-        actionPoints.value = maxActionPoints.value;
+        // 极寒：白天行动力上限 -2
+        const cap = weather.value === 'blizzard' ? maxActionPoints.value - 2 : maxActionPoints.value;
+        actionPoints.value = Math.max(0, cap);
+        // 酷暑：新的一天重置当日状态
+        heatwaveFreeUsed.value = false;
+        daySkillUsed.value = false;
+        // 每日重置天气主动技能状态
+        bloodmoonUsedToday.value = false;
+        meteorUsedToday.value = false;
+        meteorDisabledToday.value = meteorDisabledNextDay.value;
+        meteorDisabledNextDay.value = false;
+        // 注意：多云天选者（cloudyChosenId/Died）整局有效，不在此处重置，仅在 resetGame 中清空
+    }
+
+    /** 初始化天气运行时状态（抽到具体天气后调用） */
+    function initWeatherState(w: WeatherType) {
+        fogDuskDay.value = 0;
+        thunderWrongUsed.value = false;
+        thunderTargetId.value = null;
+        cloudyChosenId.value = null;
+        cloudyChosenDied.value = false;
+        if (w === 'fog') {
+            fogDuskDay.value = randint(1, 4);
+        }
+    }
+
+    /** 开局随机抽取天气并记录日志 */
+    function rollWeather() {
+        weather.value = randWeather();
+        weatherRerolled.value = false;
+        initWeatherState(weather.value);
+        logWeatherChange(weather.value, 'roll');
+    }
+
+    /** 重掷天气：消耗声望，每局限一次，返回是否成功 */
+    function rerollWeather(): boolean {
+        if (weatherRerolled.value) return false;
+        if (reputation.value < REROLL_WEATHER_COST) return false;
+        reputation.value -= REROLL_WEATHER_COST;
+        logReputationChange(-REROLL_WEATHER_COST, '重掷天气');
+        weatherRerolled.value = true;
+        weather.value = randWeather();
+        initWeatherState(weather.value);
+        logWeatherChange(weather.value, 'reroll');
+        return true;
     }
 
     function resetGame() {
@@ -162,6 +231,19 @@ export const useDataStore = defineStore('data', () => {
         possibleEvil.value = [];
         playerCharacter.value = new PlayerCharacter();
         currentMatchConfig.value = null;
+        weather.value = null;
+        weatherRerolled.value = false;
+        fogDuskDay.value = 0;
+        thunderWrongUsed.value = false;
+        thunderTargetId.value = null;
+        heatwaveFreeUsed.value = false;
+        daySkillUsed.value = false;
+        bloodmoonUsedToday.value = false;
+        meteorUsedToday.value = false;
+        meteorDisabledToday.value = false;
+        meteorDisabledNextDay.value = false;
+        cloudyChosenId.value = null;
+        cloudyChosenDied.value = false;
         // 清空角色自定义标签
         chars.value.forEach(c => { c.customTags = []; c.dynamicTags = []; });
         clearLog();
@@ -186,6 +268,8 @@ export const useDataStore = defineStore('data', () => {
             outsiderMax.value,
             currentMatchConfig.value,
             initCounts.value,
+            weather.value,
+            weatherRerolled.value,
         );
     }
 
@@ -207,6 +291,8 @@ export const useDataStore = defineStore('data', () => {
         outsiderMax.value = data.outsiderMax;
         currentMatchConfig.value = data.currentMatchConfig;
         initCounts.value = data.initCounts;
+        weather.value = data.weather ?? null;
+        weatherRerolled.value = data.weatherRerolled ?? false;
         return true;
     }
 
@@ -218,5 +304,5 @@ export const useDataStore = defineStore('data', () => {
         removeSave();
     }
 
-    return { chars, playerCharacter, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, canSpendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
+    return { chars, playerCharacter, time, nextTime, currentTimeString, playerNumber, reputation, charList, actionPoints, maxActionPoints, canAfford, canSpendActionPoints, resetActionPoints, evilAlive, gameOver, gameLog, knownGoodRoles, possibleEvil, villagerMin, villagerMax, outsiderMin, outsiderMax, displayVillagerRange, displayOutsiderRange, addKnownGoodRole, initKnownGoodRoles, initPossibleEvil, resetGame, initCounts, weather, weatherRerolled, fogDuskDay, thunderWrongUsed, thunderTargetId, heatwaveFreeUsed, daySkillUsed, bloodmoonUsedToday, meteorUsedToday, meteorDisabledToday, meteorDisabledNextDay, cloudyChosenId, cloudyChosenDied, rollWeather, rerollWeather, aiConfigured, aiConfig, setAiConfig, getAiConfig, currentMatchConfig, saveGame, loadGame, hasSaveGame, deleteSaveGame }
 })

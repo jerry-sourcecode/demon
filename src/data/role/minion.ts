@@ -67,8 +67,8 @@ export const minionRoles = {
                 const obj = pickGood(dataStore.charList())[0];
                 logSkillResolution(c.id, `刺杀了 #${obj?.id}（::${obj?.role}::）。`);
                 c.useSkill('assassinKill');
-                obj?.addTag('dying', {
-                    till: Time.makeTime(2, Time.Phase.Dawn),
+                obj?.addTag(TagType.dead, {
+                    at: Time.makeTime(2, Time.Phase.Dawn),
                     source: c.id,
                     meta: { force: true, type: 'assassin' },
                 })
@@ -100,7 +100,7 @@ export const minionRoles = {
             }
             const prevId = playerData.get(c.id) ?? 0;
             const evilList = dataStore.charList().filter(
-                x => x.isTrulyEvil() && !x.hasTag(TagType.dead)
+                x => x.isTrulyEvil() && !x.isDead()
             );
 
             // 与上个夜晚选择的目标不同；若排除后没有候选，则本晚不保护任何人
@@ -174,15 +174,15 @@ export const minionRoles = {
                 return;
             }
             const deadOutsiders = dataStore.charList().filter(
-                x => x.getRoleDetail().faction === Faction.outsider && x.hasTag(TagType.dead)
+                x => x.getRoleDetail().faction === Faction.outsider && x.isDead()
             ).length;
             const lastCount = playerData.get(c.id) ?? 0;
             if (deadOutsiders > lastCount) {
                 playerData.set(c.id, deadOutsiders);
                 const target = pickGood(dataStore.charList())[0];
                 logSkillResolution(c.id, `由于白天有::outsider::死亡，教父杀死了 #${target?.id}（::${target?.role}::）`)
-                target?.addTag('dying', {
-                    till: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
+                target?.addTag(TagType.dead, {
+                    at: Time.makeTime(Time.getDay(t), Time.Phase.Dawn),
                     source: c.id,
                     meta: { type: 'night' },
                 });
@@ -193,7 +193,7 @@ export const minionRoles = {
         display: '狐媚娘',
         faction: Faction.minion,
         summery: '“王上，妾身有两个妹妹，一个名为喜媚，一个名为琵琶。”',
-        ability: `首夜，会有一名::kind::：如果你死于处决且场上还有剩余的::evil::，他立即::poisoned::转变为邪恶阵营。`,
+        ability: `首夜，会有一名与你邻近的::kind::：如果你死于处决且场上没有剩余的::evil::，他立即转变为邪恶阵营。`,
         abnormal: {
             overall: "不会有玩家转变为邪恶阵营。",
         },
@@ -203,45 +203,97 @@ export const minionRoles = {
         onNightSkill(c, t) {
             if (Time.getDay(t) !== 1) return;
             const dataStore = useDataStore();
-            // 首个夜晚：选择一名善良玩家作为目标
-            const target = randpick(
-                dataStore.charList(),
-                1,
-                x => !x.isEvil() && x.id !== c.id,
-            ).items[0];
-            if (target) {
+            // 首个夜晚：选择一名与你邻近的善良玩家作为目标（顺时针/逆时针最近存活的 kind 中随机一个）
+            const neighbors = [nearestAlive(c, 'cw'), nearestAlive(c, 'ccw')].filter(
+                (x): x is Character => !!x && !x.isEvil() && x.id !== c.id
+            );
+            if (neighbors.length > 0) {
+                const target = randpick(neighbors).items[0]!;
                 playerData.set(c.id, target.id);
                 // 打上魅惑标记：击杀选择时按外来者同级处理（不优先击杀）
                 target.addTag(TagType.unfavored, { source: c.id });
-                logSkillResolution(c.id, `选择了 #${target.id}（::${target.role}::）作为目标。`);
+                logSkillResolution(c.id, `选择了邻近的 #${target.id}（::${target.role}::）作为目标。`);
             }
         },
         afterTagAdd(c, tg) {
-            // 死于处决时，魅惑目标转变为邪恶阵营（并立即中毒）
+            // 死于处决时，若场上没有剩余的邪恶玩家，邻近目标转变为邪恶阵营
             if (tg.type === TagType.dead && (tg.meta as any)?.type === 'execute') {
                 if (!c.isAwake('Vixen')) {
                     logSkillResolution(c.id, '由于神志不清，目标未转变为邪恶阵营。');
                     return;
                 }
                 const dataStore = useDataStore();
-                // 若狐媚娘是最后一名存活邪恶玩家，处决她将直接结束游戏，不触发转变
+                // 仅当狐媚娘是最后一名存活邪恶玩家时，目标才转变为邪恶阵营
                 const otherEvilAlive = dataStore.charList().some(
-                    x => x.isTrulyEvil() && x.id !== c.id && !x.hasTag(TagType.dead)
+                    x => x.isTrulyEvil() && x.id !== c.id && !x.isDead()
                 );
-                if (!otherEvilAlive) {
-                    logSkillResolution(c.id, '狐媚娘是最后一名邪恶玩家，游戏结束，没有玩家转变为邪恶阵营。');
+                if (otherEvilAlive) {
+                    logSkillResolution(c.id, '场上仍有其他邪恶玩家，没有玩家转变为邪恶阵营。');
                     return;
                 }
                 const targetId = playerData.get(c.id);
                 const target = targetId ? dataStore.chars.get(targetId) : undefined;
-                if (target && !target.hasTag(TagType.dead)) {
+                if (target && !target.isDead()) {
                     target.alignment = Alignment.evil;
-                    target.addTag(TagType.confused, {
-                        till: Time.FAR_FUTURE,
-                        source: c.id,
-                    });
-                    logSkillResolution(c.id, `由于狐媚娘被处决，#${target.id}（::${target.role}::）转变为邪恶阵营并开始::poisoned::。`);
+                    logSkillResolution(c.id, `由于狐媚娘被处决且场上没有剩余的::evil::，#${target.id}（::${target.role}::）转变为邪恶阵营。`);
                 }
+            }
+        },
+    },
+    Seducer: {
+        display: '蛊惑者',
+        faction: Faction.minion,
+        summery: '“凝视我的眼眸，你会忘记白天所见的每一张脸。”',
+        ability: '每个夜晚，随机一名存活::kind::被视为::evil::，直到下一个::dawn::。',
+        abnormal: {
+            overall: "不会有玩家被视为邪恶。",
+        },
+        nightActionPriority() {
+            return 8;
+        },
+        onNightSkill(c, t) {
+            const dataStore = useDataStore();
+            if (!c.isAwake('Seducer')) {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                return;
+            }
+            // 随机一名存活善良玩家，使其被视为邪恶直到下一个黎明（误导信息，甚至引导处决自己人）
+            const target = pickGood(dataStore.charList())[0];
+            if (target) {
+                target.addTag(TagType.tempted, {
+                    till: Time.makeTime(Time.getDay(t) + 1, Time.Phase.Dawn),
+                    source: c.id,
+                });
+                logSkillResolution(c.id, `蛊惑了 #${target.id}（::${target.role}::），使其被视为::evil::直到下一个黎明。`);
+            }
+        },
+    },
+    Extortionist: {
+        display: '勒索者',
+        faction: Faction.minion,
+        summery: '“想要真相？先付代价。”',
+        ability: '每个夜晚，随机一名存活玩家：他第二天无法发动主动技能，也无法被处决。',
+        abnormal: {
+            overall: "不会有玩家被封锁。",
+        },
+        nightActionPriority() {
+            return 8;
+        },
+        onNightSkill(c, t) {
+            const dataStore = useDataStore();
+            if (!c.isAwake('Extortionist')) {
+                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                return;
+            }
+            // 随机一名存活玩家（不含自己），次日无法发动主动技能、也无法被处决
+            const alive = dataStore.charList().filter(x => !x.isDead() && x.id !== c.id);
+            if (alive.length > 0) {
+                const target = randpick(alive).items[0]!;
+                target.addTag(TagType.blocked, {
+                    till: Time.makeTime(Time.getDay(t) + 1, Time.Phase.Dawn),
+                    source: c.id,
+                });
+                logSkillResolution(c.id, `勒索了 #${target.id}（::${target.role}::），他次日无法行动也无法被处决。`);
             }
         },
     }

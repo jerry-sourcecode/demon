@@ -11,6 +11,7 @@
 				:delay="300"
 				:duration="200"
 				trigger="hover"
+				:disabled="hideIdentity"
 				@mouseenter="hovered = true"
 				@mouseleave="hovered = false">
 				<template #trigger>
@@ -146,11 +147,11 @@
 				type="warning"
 				block
 				@click="onRecall">
-				回忆{{ canAffordRecall ? "" : `（${ACTION_COST.recall} AP）` }}
+				回忆{{ canAffordRecall ? "" : `（${getCost("recall")} AP）` }}
 			</NButton>
 			<NButton
 				v-if="canShowSkill"
-				:disabled="!canAffordSkill"
+				:disabled="!canAffordSkill || skillBlocked"
 				size="small"
 				type="primary"
 				block
@@ -158,7 +159,7 @@
 				发动技能{{
 					canAffordSkill
 						? ""
-						: `（${needAPForSkill ? ACTION_COST.skill : 0} AP）`
+						: `（${needAPForSkill ? getCost("skill") : 0} AP）`
 				}}
 			</NButton>
 			<NButton
@@ -168,9 +169,7 @@
 				type="error"
 				block
 				@click="onExecute">
-				处决{{
-					canAffordExecute ? "" : `（${ACTION_COST.execute} AP）`
-				}}
+				处决{{ canAffordExecute ? "" : `（${getCost("execute")} AP）` }}
 			</NButton>
 			<p
 				v-if="!canShowRecall && !canShowSkill && !canShowExecute"
@@ -211,6 +210,7 @@ import { Time } from "@/utils/time";
 import { runFn } from "@/utils/utils.ts";
 import AbilityMd from "./AbilityMd.vue";
 import { TagType } from "@/data/tag.ts";
+import { NIGHT_CAUSES } from "@/data/constants";
 import {
 	logRecall,
 	logExecute,
@@ -240,6 +240,10 @@ const calRole = computed(() => {
 });
 
 const calRoleName = computed(() => {
+	// 月食：夜间死亡的玩家不揭示身份（复盘时才能看到）
+	if (isDead.value && weather.value === "eclipse" && nightDeath.value) {
+		return "已死亡";
+	}
 	if (props.data.displayRole === null) return "未知";
 	const displayName = RoleMap[props.data.displayRole].display;
 	// 死亡的邪恶玩家（按阵营判断），真实身份只显示「邪恶玩家」
@@ -256,12 +260,26 @@ const calRoleName = computed(() => {
 });
 
 const calColor = computed(() => {
+	// 月食：夜间死亡玩家身份隐藏，颜色置灰
+	if (isDead.value && weather.value === "eclipse" && nightDeath.value)
+		return "gray";
 	const role = calRole.value;
 	if (role === null) return "gray";
 	return FACTION_COLORS[role.faction];
 });
 
-const isDead = computed(() => props.data.hasTag(TagType.dead));
+const isDead = computed(() => props.data.isDead());
+// 夜间死亡死因（月食仅隐藏夜间死亡玩家的身份）
+const nightDeath = computed(() => {
+	const dt = props.data.getTag(TagType.dead)[0]?.meta as
+		| { type?: string }
+		| undefined;
+	return dt?.type !== undefined && NIGHT_CAUSES.includes(dt.type);
+});
+// 月食：仅夜间死亡的玩家隐藏身份，禁用悬浮/右键/长按提示
+const hideIdentity = computed(
+	() => isDead.value && weather.value === "eclipse" && nightDeath.value,
+);
 // 死亡的邪恶玩家（按阵营判断）
 const isDeadEvil = computed(() => isDead.value && props.data.isTrulyEvil());
 
@@ -360,14 +378,16 @@ function onCardClick(e: MouseEvent) {
 
 const isDay = computed(() => Time.getPhase(dataStore.time) === Time.Phase.Day);
 
+const weather = computed(() => dataStore.weather);
+
 // 回忆
 const canShowRecall = computed(
 	() =>
 		!props.data.hasTag(TagType.recall) &&
-		!props.data.hasTag(TagType.dead) &&
+		!props.data.isDead() &&
 		isDay.value,
 );
-const canAffordRecall = computed(() => dataStore.canAfford(ACTION_COST.recall));
+const canAffordRecall = computed(() => dataStore.canAfford(getCost("recall")));
 
 // 技能
 const skillRoles = computed<RoleType[]>(() => {
@@ -382,7 +402,7 @@ const skillRoles = computed<RoleType[]>(() => {
 });
 const canShowSkill = computed(() => {
 	if (dataStore.gameOver) return false;
-	if (props.data.hasTag(TagType.dead)) return false;
+	if (props.data.isDead()) return false;
 	return skillRoles.value.some(
 		(r) =>
 			runFn(RoleMap[r]?.canActivateSkill, props.data, dataStore.time) ??
@@ -391,19 +411,33 @@ const canShowSkill = computed(() => {
 });
 const needAPForSkill = computed(() => isDay.value);
 const canAffordSkill = computed(
-	() => !isDay.value || dataStore.canAfford(ACTION_COST.skill),
+	() =>
+		!isDay.value ||
+		dataStore.canAfford(getCost("skill") + Number(weather.value == "fog")),
+);
+/** 酷暑：已用免费处决则禁用发动技能；勒索者：被封锁则禁用主动技能 */
+const skillBlocked = computed(
+	() =>
+		(weather.value === "heatwave" && dataStore.heatwaveFreeUsed) ||
+		props.data.hasTag(TagType.blocked),
 );
 
 // 处决
-const canShowExecute = computed(() => isDay.value);
+const canShowExecute = computed(
+	() => isDay.value && !props.data.hasTag(TagType.blocked),
+);
 const canAffordExecute = computed(() =>
-	dataStore.canAfford(ACTION_COST.execute),
+	weather.value === "heatwave" &&
+	!dataStore.daySkillUsed &&
+	!dataStore.heatwaveFreeUsed
+		? true
+		: dataStore.canAfford(getCost("execute")),
 );
 
 function onRecall() {
-	if (!dataStore.canSpendActionPoints(ACTION_COST.recall)) {
+	if (!dataStore.canSpendActionPoints(getCost("recall"))) {
 		console.log(
-			`[Player] onRecall 失败: AP不足, AP=${dataStore.actionPoints}, cost=${ACTION_COST.recall}`,
+			`[Player] onRecall 失败: AP不足, AP=${dataStore.actionPoints}, cost=${getCost("recall")}`,
 		);
 		return;
 	}
@@ -430,6 +464,12 @@ function afterSkillActivate(c: Character) {
 
 async function onSkill() {
 	showActions.value = false;
+	// 勒索者封锁：被封锁则无法发动主动技能
+	if (props.data.hasTag(TagType.blocked)) {
+		console.log(`[Player] onSkill 被封锁: #${props.data.id}`);
+		emit("action-done");
+		return;
+	}
 	// 找到第一个可发动的技能角色（本体/伪装优先，其次获得的能力）
 	const activatable = skillRoles.value.filter(
 		(r) =>
@@ -451,12 +491,13 @@ async function onSkill() {
 	}
 	// 白天消耗行动点，黎明/黄昏不消耗
 	const isDay = Time.getPhase(dataStore.time) === Time.Phase.Day;
-	if (isDay && !dataStore.canSpendActionPoints(ACTION_COST.skill)) {
+	if (isDay && !dataStore.canSpendActionPoints(getCost("skill"))) {
 		console.log(
 			`[Player] onSkill AP不足: #${props.data.id}, AP=${dataStore.actionPoints}, 未发送action-done`,
 		);
 		return;
 	}
+	if (isDay) dataStore.daySkillUsed = true;
 	afterSkillActivate(props.data);
 	console.log(
 		`[Player] onSkill 成功: #${props.data.id}(${props.data.displayRole}), AP=${dataStore.actionPoints}`,
@@ -472,14 +513,27 @@ function onExecute() {
 		positiveText: "确定",
 		negativeText: "取消",
 		onPositiveClick: () => {
-			if (!dataStore.canSpendActionPoints(ACTION_COST.execute)) {
+			// 酷暑：若今天白天尚未发动主动技能且未用免费处决，可免费处决
+			const freeExecute =
+				weather.value === "heatwave" &&
+				!dataStore.daySkillUsed &&
+				!dataStore.heatwaveFreeUsed;
+			if (
+				!freeExecute &&
+				!dataStore.canSpendActionPoints(getCost("execute"))
+			) {
 				console.log(
 					`[Player] onExecute 失败: AP不足, AP=${dataStore.actionPoints}`,
 				);
 				return;
 			}
-			logExecute(props.data.id, props.data.hasTag(TagType.dead));
-			props.data.addTag(TagType.executed);
+			if (freeExecute) {
+				dataStore.heatwaveFreeUsed = true;
+			} else {
+				dataStore.canSpendActionPoints(getCost("execute"));
+			}
+			logExecute(props.data.id, props.data.isDead());
+			props.data.execute();
 			console.log(
 				`[Player] onExecute: #${props.data.id}, AP=${dataStore.actionPoints}`,
 			);
@@ -491,6 +545,7 @@ function onExecute() {
 // ── 长按（移动端显示详情，等同于右键）──
 function onTouchStart() {
 	if (props.selecting) return;
+	if (hideIdentity.value) return; // 月食：死亡玩家禁用长按提示
 	longPressTimer.value = setTimeout(() => {
 		longPressTimer.value = null;
 		showDetailModal.value = true;
@@ -507,7 +562,14 @@ function onTouchMove() {
 }
 
 function showDetail() {
+	// 月食：死亡玩家禁用右键/长按详情提示
+	if (hideIdentity.value) return;
 	showDetailModal.value = true;
+}
+
+function getCost(usage: "skill" | "execute" | "recall") {
+	let append = usage == "skill" && weather.value == "fog" ? 1 : 0;
+	return ACTION_COST[usage] + append;
 }
 </script>
 

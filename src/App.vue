@@ -18,6 +18,7 @@
 						</template>
 					</n-split>
 					<DrawingOverlay />
+					<WeatherBadge />
 				</div>
 			</template>
 		</NDialogProvider>
@@ -31,6 +32,7 @@ import Paper from "./components/Paper.vue";
 import PlayerPanel from "./components/PlayerPanel.vue";
 import GameStart from "./components/GameStart.vue";
 import DrawingOverlay from "./components/DrawingOverlay.vue";
+import WeatherBadge from "./components/WeatherBadge.vue";
 import InfoPanel from "./components/InfoPanel.vue";
 
 const started = ref(false);

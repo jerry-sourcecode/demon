@@ -59,6 +59,8 @@ export const villagerRoles = {
                 const x = dataStore.chars.get(i);
                 if (x?.hasTag(TagType.confused)) { cnt++; cleansed.push(x.id); }
                 x?.clearTags(TagType.confused);
+                // 极寒：净化可移除「冻僵」救回目标
+                x?.clearTags(TagType.frozen);
             }
             c.useSkill('skill');
             c.info.push(`有 ${cnt} 位玩家受到了我的影响。`)
@@ -270,7 +272,7 @@ export const villagerRoles = {
         },
         async onActiveSkill(c) {
             const emitter = useEmitter();
-            const x = await emitter.emit('select-player', { filter: (ch) => ch.hasTag(TagType.dead), count: 1 });
+            const x = await emitter.emit('select-player', { filter: (ch) => ch.isDead(), count: 1 });
             if (!x) return false;
             c.useSkill('skill');
             const obj = x[0]!;
@@ -646,6 +648,7 @@ export const villagerRoles = {
                 // 调用 AI
                 const aiConfig = dataStore.getAiConfig();
                 if (!aiConfig) {
+                    emitter.emit('question-done', true);
                     await emitter.emit('show-message', {
                         type: 'warning',
                         content: 'AI 未配置，无法回答问题。',
@@ -664,7 +667,8 @@ export const villagerRoles = {
                 const parsed = parseArtistAnswer(answer ?? '');
 
                 if (parsed.answer === 'cannot_answer') {
-                    // AI 未能给出"是/否"答案（含"我不知道"），提示用户重新提问，不消耗技能
+                    // AI 未能给出"是/否"答案（含"我不知道"），恢复输入让玩家重新提问，不消耗技能
+                    emitter.emit('question-done', false);
                     await emitter.emit('show-message', {
                         type: 'warning',
                         content: '说书人无法用"是"或"否"回答此问题，请换一个问题。',
@@ -672,6 +676,8 @@ export const villagerRoles = {
                     continue;
                 }
 
+                // AI 已回复：关闭提问弹窗
+                emitter.emit('question-done', true);
                 // 消耗技能
                 c.useSkill('skill');
 
@@ -1165,7 +1171,7 @@ export const villagerRoles = {
             const other = randpick(
                 dataStore.charList(),
                 1,
-                x => x.id !== killer.id && !x.hasTag(TagType.dead)
+                x => x.id !== killer.id && !x.isDead()
             ).items[0];
             if (!other) return;
 

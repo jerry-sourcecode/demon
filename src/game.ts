@@ -14,7 +14,7 @@ import { useDataStore } from "./store/value";
 import { Time } from "./utils/time";
 import { allRoleKeys, randpick, runFn, sleep } from "./utils/utils";
 import { TagType } from "./data/tag";
-import { logGameStart, logGameEnd } from "./data/gameLog";
+import { logGameStart, logGameEnd, logSkillResolution, logWeatherInfo } from "./data/gameLog";
 import { playerRoles, PlayerRoleType } from "./data/role/player";
 import type { MatchConfig } from "./data/match";
 
@@ -51,8 +51,8 @@ function checkGameEnd(dataStore: ReturnType<typeof useDataStore>, emitter: Retur
         return true;
     }
 
-    // 条件：存活的非邪恶（好人）角色 ≤ 1
-    if (dataStore.charList().filter(c => !c.isEvil() && !c.hasTag(TagType.dead)).length <= 1) {
+    // 条件：存活的真正善良（非邪恶）角色 ≤ 1；终局只看 isTrulyEvil，tempted/隐士不影响
+    if (dataStore.charList().filter(c => !c.isTrulyEvil() && !c.isTrulyDead()).length <= 1) {
         dataStore.gameOver = true;
         logGameEnd(false, '仅剩1名::kind::，::evil::控制了小镇');
         emitter.emit('game-end', false);
@@ -77,13 +77,13 @@ function collectSkillRoles(x: Character): RoleType[] {
     // 活死人（僵怖首次死亡后，同时拥有 dead + alive 标签）：
     // 只保留本体技能——僵怖活死人仅能在夜间造成死亡并影响终局判定，
     // 不再执行伪装身份或获得的能力
-    if (x.hasTag(TagType.dead) && x.hasTag(TagType.alive)) {
+    if (x.isDead() && x.hasTag(TagType.alive)) {
         return [x.role];
     }
     const roles = new Set<RoleType>([x.role]);
     // 获得的能力
     for (const tg of x.getTag(TagType.gained)) {
-        for (const r of tg.meta as RoleType[]) roles.add(r);
+        for (const r of tg.meta) roles.add(r);
     }
     // 伪装角色的能力（酒鬼/邪恶角色的伪装身份）
     if (x.hasTag(TagType.disguise)) {
@@ -94,8 +94,10 @@ function collectSkillRoles(x: Character): RoleType[] {
 
 function triggerTimeChange(dataStore: ReturnType<typeof useDataStore>) {
     dataStore.chars.forEach(x => {
-        // 跳过已死亡且未「获得能力」标记的角色（亡骨魔保留爪牙 / 双面人获得能力）
-        if (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained)) return;
+        // 死亡结算：处理到点的延期死亡
+        x.settlePendingDeaths();
+        // 跳过已真正死亡且未「获得能力」标记的角色（亡骨魔保留爪牙 / 双面人获得能力）
+        if (x.isTrulyDead() && !x.hasTag(TagType.gained)) return;
         for (const role of collectSkillRoles(x)) {
             runFn(RoleMap[role].onTimeChange, x, dataStore.time);
         }
@@ -103,6 +105,75 @@ function triggerTimeChange(dataStore: ReturnType<typeof useDataStore>) {
     // 玩家（说书人）技能的时间钩子
     for (const key of dataStore.playerCharacter.roles) {
         runFn(playerRoles[key]?.onTimeChange, dataStore.playerCharacter, dataStore.time);
+    }
+}
+
+/** 黎明天气结算（雷暴揭示 / 双子月信息） */
+function applyDawnWeather(dataStore: ReturnType<typeof useDataStore>) {
+    const w = dataStore.weather;
+    if (!w) return;
+    // 雷暴：黎明揭示被震慑玩家是否 evil（首次本应揭示 evil 时改为善良）
+    if (w === 'thunderstorm' && dataStore.thunderTargetId !== null) {
+        const t = dataStore.chars.get(dataStore.thunderTargetId);
+        if (t) {
+            let isEvil = t.isTrulyEvil();
+            // 首次将要得知该玩家是 evil 时，改为得知其善良（雷光骗你一次）
+            if (isEvil && !dataStore.thunderWrongUsed) {
+                isEvil = false;
+                dataStore.thunderWrongUsed = true;
+                logSkillResolution(t.id, `雷光照出原形：#${t.id} 其实是::evil::，你得知其为::kind::。`);
+            }
+            logWeatherInfo(`雷光照出原形：#${t.id} ${isEvil ? '是::evil::' : '是::kind::'}。`);
+        }
+        dataStore.thunderTargetId = null;
+    }
+}
+
+/** 黄昏天气结算（浓雾：指定黄昏全员邪恶中毒；暴雨：随机善良醉酒） */
+function applyDuskWeather(dataStore: ReturnType<typeof useDataStore>) {
+    const w = dataStore.weather;
+    if (!w) return;
+    // 浓雾：第 fogDuskDay 个黄昏，所有 evil 中毒到下一个黎明
+    if (w === 'fog' && dataStore.fogDuskDay > 0 && Time.getDay(dataStore.time) === dataStore.fogDuskDay) {
+        const till = Time.makeTime(Time.getDay(dataStore.time) + 1, Time.Phase.Dawn);
+        dataStore.charList().forEach(x => {
+            if (x.isTrulyEvil() && !x.isDead()) {
+                x.addTag(TagType.confused, { till, source: 0 });
+                logSkillResolution(x.id, '浓雾弥漫，你被::poisoned::直到下一个黎明。');
+            }
+        });
+    }
+    // 暴雨：每个 dusk，30% 概率一名存活的善良玩家 drunk 到下一个 dusk
+    if (w === 'rainstorm' && Math.random() < 0.3) {
+        const kinds = dataStore.charList().filter(x => !x.isTrulyEvil() && !x.isDead());
+        if (kinds.length > 0) {
+            const target = randpick(kinds).items[0]!;
+            const till = Time.makeTime(Time.getDay(dataStore.time) + 1, Time.Phase.Dusk);
+            target.addTag(TagType.confused, { till, source: 0 });
+            logSkillResolution(target.id, `暴雨：你被::drunk::直到下一个::dusk::。`);
+        }
+    }
+}
+
+/** 开局天气结算（多云：天选者 + 二选一信息） */
+function applyStartWeather(dataStore: ReturnType<typeof useDataStore>) {
+    if (dataStore.weather === 'cloudy') {
+        const villagers = dataStore.charList().filter(
+            x => x.getRoleDetail().faction === Faction.villager && !x.isDead(),
+        );
+        if (villagers.length > 0) {
+            const chosen = randpick(villagers).items[0]!;
+            dataStore.cloudyChosenId = chosen.id;
+            const others = dataStore.charList().filter(x => x.id !== chosen.id);
+            if (others.length > 0) {
+                const decoy = randpick(others).items[0]!;
+                logWeatherInfo(`多云笼罩：#${chosen.id} 与 #${decoy.id} 中有一名始终保持::awake::的::villager::。`);
+            }
+        }
+    }
+    // 浓雾：开局得知降临黄昏
+    if (dataStore.weather === 'fog' && dataStore.fogDuskDay > 0) {
+        logWeatherInfo(`浓雾将在第 ${dataStore.fogDuskDay} 个黄昏降临。`);
     }
 }
 
@@ -125,7 +196,7 @@ function syncPlayerRoles(dataStore: ReturnType<typeof useDataStore>) {
 function hasActivatableSkill(dataStore: ReturnType<typeof useDataStore>): boolean {
     let found = false;
     dataStore.chars.forEach(x => {
-        if (found || (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained))) return;
+        if (found || (x.isTrulyDead() && !x.hasTag(TagType.gained))) return;
         for (const role of collectSkillRoles(x)) {
             if (runFn(RoleMap[role].canActivateSkill, x, dataStore.time)) { found = true; return; }
         }
@@ -293,26 +364,26 @@ export async function start(matchConfig: MatchConfig) {
     }
 
     // ── 6. Tab 面板初始化：构建「可能的邪恶身份」列表 ──
-    // 列表中包含：真实恶魔/爪牙 + 各一个不在场的混淆项
+    // 列表中包含：真实恶魔/爪牙 + 各两个不在场的混淆项
     const allMinionKeys = allRoleKeys().filter(k => RoleMap[k].faction === Faction.minion);
     const allDemonKeys = allRoleKeys().filter(k => RoleMap[k].faction === Faction.demon);
     let actualEvil = dataStore.charList()
         .filter(c => c.isTrulyEvil())
         .map(c => c.role);
 
-    // 混淆恶魔：添加一个不在场的恶魔（使玩家无法直接排除）
+    // 混淆恶魔：添加两个不在场的恶魔（使玩家无法直接排除）
     if (matchConfig.demon > 0) {
         const absentDemon = allDemonKeys.filter(k => !actualEvil.includes(k));
         if (absentDemon.length > 0) {
-            actualEvil.push(randpick(absentDemon, 1).items[0]!);
+            actualEvil.push(...randpick(absentDemon, Math.min(2, absentDemon.length)).items.map(x => x!));
         }
     }
 
-    // 混淆爪牙：添加一个不在场的爪牙
+    // 混淆爪牙：添加两个不在场的爪牙
     if (matchConfig.minion > 0) {
         const absentMinion = allMinionKeys.filter(k => !actualEvil.includes(k));
         if (absentMinion.length > 0) {
-            actualEvil.push(randpick(absentMinion, 1).items[0]!);
+            actualEvil.push(...randpick(absentMinion, Math.min(2, absentMinion.length)).items.map(x => x!));
         }
     }
 
@@ -364,6 +435,16 @@ export async function start(matchConfig: MatchConfig) {
     const initRoles: Record<number, RoleType> = {};
     dataStore.chars.forEach((c, id) => { initRoles[id] = c.role; });
     logGameStart(initRoles);
+
+    // ── 8.5 抽取本局天气（每局固定一个，开局弹窗确认是否重掷） ──
+    dataStore.rollWeather();
+    const rerollWanted = await emitter.emit('confirm-weather-reroll', dataStore.weather!);
+    if (rerollWanted) {
+        dataStore.rerollWeather();
+        await emitter.emit('show-weather', dataStore.weather!);
+    }
+    // 天气确定后（若重掷则按新天气）再初始化天气效果
+    applyStartWeather(dataStore);
 
     // ── 9. 触发游戏开始事件 + 所有角色的 onStart 钩子 ──
     emitter.emit('game-start');
@@ -489,10 +570,21 @@ async function runGameLoop(
             console.log(`[GameLoop] #${loopIter} 开始处理夜间技能`);
             triggerTimeChange(dataStore);
 
+            // ── 天气：雷暴 / 双子月（夜间生效） ──
+            // 雷暴：随机一名玩家被雷电震慑，当晚无法行动
+            let thunderStunned: number | null = null;
+            if (dataStore.weather === 'thunderstorm') {
+                const aliveList = dataStore.charList().filter(x => !x.isDead());
+                if (aliveList.length > 0) {
+                    thunderStunned = randpick(aliveList).items[0]!.id;
+                    dataStore.thunderTargetId = thunderStunned;
+                }
+            }
+
             // 收集所有角色的夜间技能，按优先级降序执行
             const order: { prio: number; c: Character; role: RoleType }[] = [];
             dataStore.chars.forEach(x => {
-                if (x.hasTag(TagType.dead) && !x.hasTag(TagType.gained) && !x.hasTag(TagType.alive)) return;
+                if (x.isTrulyDead() && !x.hasTag(TagType.gained)) return;
                 for (const role of collectSkillRoles(x)) {
                     const prio = runFn(RoleMap[role].nightActionPriority, x);
                     if (prio !== undefined) order.push({ prio, c: x, role });
@@ -501,6 +593,11 @@ async function runGameLoop(
             // 按优先级从高到低执行
             order.sort((a, b) => b.prio - a.prio);
             for (const x of order) {
+                // 雷暴：被震慑的玩家当晚无法行动
+                if (thunderStunned !== null && x.c.id === thunderStunned) {
+                    logSkillResolution(x.c.id, '雷暴震慑，当晚无法行动。');
+                    continue;
+                }
                 console.log(`[GameLoop] #${loopIter} 执行夜间技能: #${x.c.id}(${RoleMap[x.role].display})`);
                 await runFn(RoleMap[x.role].onNightSkill, x.c, dataStore.time);
             }
@@ -510,6 +607,14 @@ async function runGameLoop(
             const phaseName = Time.PHASE_NAMES[Time.getPhase(dataStore.time)];
             console.log(`[GameLoop] #${loopIter} 非夜间阶段: ${phaseName}`);
             triggerTimeChange(dataStore);
+
+            // ── 天气：黎明 / 黄昏结算 ──
+            const curPhase = Time.getPhase(dataStore.time);
+            if (curPhase === Time.Phase.Dawn) {
+                applyDawnWeather(dataStore);
+            } else if (curPhase === Time.Phase.Dusk) {
+                applyDuskWeather(dataStore);
+            }
 
             if (Time.getPhase(dataStore.time) === Time.Phase.Day) {
                 // ── 白天：行动力系统 ──

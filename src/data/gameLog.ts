@@ -2,6 +2,7 @@ import { ref, type Ref } from "vue";
 import { useDataStore } from "@/store/value";
 import { Time } from "@/utils/time";
 import type { DeadReasonType, RoleType } from "./model";
+import type { WeatherType } from "./weather";
 
 // ── 事件类型 ──
 
@@ -16,7 +17,9 @@ export type GameEventType =
     | 'skillResolution'
     | 'skillActivate'
     | 'gameEnd'
-    | 'confusedChange';
+    | 'confusedChange'
+    | 'weatherChange'
+    | 'weatherInfo';
 
 // ── 各事件类型的 meta ──
 
@@ -89,6 +92,15 @@ interface ConfusedChangeMeta {
     role: RoleType;
 }
 
+interface WeatherChangeMeta {
+    weather: WeatherType;
+    action: 'roll' | 'reroll';
+}
+
+interface WeatherInfoMeta {
+    detail: string;
+}
+
 export type GameEventMeta =
     | GameStartMeta
     | PhaseChangeMeta
@@ -100,7 +112,9 @@ export type GameEventMeta =
     | SkillResolutionMeta
     | SkillActivateMeta
     | GameEndMeta
-    | ConfusedChangeMeta;
+    | ConfusedChangeMeta
+    | WeatherChangeMeta
+    | WeatherInfoMeta;
 
 // ── 完整事件 ──
 
@@ -216,4 +230,13 @@ export function logConfusedChange(
     till?: Time.TimeNumber,
 ): void {
     addLog('confusedChange', subject, { action, role, source, sourceRole, till });
+}
+
+export function logWeatherChange(weather: WeatherType, action: 'roll' | 'reroll'): void {
+    addLog('weatherChange', 0, { weather, action });
+}
+
+/** 记录一条天气告知信息（如雷暴揭示、双子月线索、血月选择等，显示在信息面板） */
+export function logWeatherInfo(detail: string): void {
+    addLog('weatherInfo', 0, { detail });
 }

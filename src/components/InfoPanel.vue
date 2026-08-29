@@ -239,6 +239,16 @@ const entries = computed<InfoEntry[]>(() => {
 						: `失败${meta.reason ? `（${meta.reason}）` : ""}`,
 				});
 				break;
+
+			case "weatherInfo":
+				result.push({
+					id: event.id,
+					type: "weather",
+					timeStr: t,
+					tag: "天气",
+					text: meta.detail,
+				});
+				break;
 		}
 	}
 	return result;

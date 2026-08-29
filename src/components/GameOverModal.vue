@@ -390,6 +390,7 @@ import {
 import { RoleMap, Faction, type RoleType, type Alignment } from "@/data/model";
 import type { GameEvent } from "@/data/gameLog";
 import type { MatchRecord } from "@/data/match";
+import { WeatherMap } from "@/data/weather";
 import { Time } from "@/utils/time";
 import AbilityMd from "./AbilityMd.vue";
 
@@ -887,6 +888,8 @@ const EVENT_LABELS: Record<string, string> = {
 	skillResolution: "技能结算",
 	gameEnd: "游戏结束",
 	confusedChange: "混乱状态",
+	weatherChange: "天气改变",
+	weatherInfo: "天气信息",
 };
 
 function formatEventTitle(event: GameEvent): string {
@@ -953,6 +956,17 @@ function formatEventDetail(event: GameEvent): string {
 				return `#${event.subject}（::${cr}::）${sourceStr}::confused::被清除`;
 			}
 		}
+		case "weatherChange": {
+			const w = WeatherMap[meta.weather as keyof typeof WeatherMap];
+			const weatherName = w
+				? `${w.icon}${w.display}`
+				: String(meta.weather ?? "");
+			return meta.action === "reroll"
+				? `重掷天气，改变为：${weatherName}`
+				: `本局天气：${weatherName}`;
+		}
+		case "weatherInfo":
+			return meta.detail ?? "";
 		default:
 			return "";
 	}

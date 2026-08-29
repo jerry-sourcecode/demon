@@ -5,6 +5,7 @@ import { Character, type RoleType, Alignment } from "./model";
 import { serializeProtectMeta, restoreProtectMeta } from "./tag";
 import type { TagType } from "./tag";
 import type { Time } from "@/utils/time";
+import type { WeatherType } from "./weather";
 
 // Infinity 无法被 JSON 正确序列化，用特殊标记代替
 const INF_MARKER = "__INF__";
@@ -23,7 +24,7 @@ export interface CharSaveData {
     alignment: Alignment;
     info: string[];
     displayRole: RoleType;
-    tags: { type: TagType; till: Time.TimeNumber; source?: number; meta?: any }[];
+    tags: { type: TagType; till: Time.TimeNumber; at?: Time.TimeNumber; source?: number; meta?: any }[];
     customTags: string[];
     dynamicTags: string[];
     skillUses: [string, { used: number; max: number }][];
@@ -45,6 +46,8 @@ export interface GameSaveData {
     outsiderMax: number;
     currentMatchConfig: MatchConfig | null;
     initCounts: { villager: number; outsider: number; minion: number; demon: number };
+    weather?: WeatherType | null;
+    weatherRerolled?: boolean;
     date: string;
 }
 
@@ -73,6 +76,7 @@ export function serializeChars(
             tags: c.tags.map((t) => ({
                 type: t.type,
                 till: saveTill(t.till) as any,
+                at: t.at,
                 source: t.source,
                 // 保护回调（函数）无法 JSON 序列化，转为可序列化描述
                 meta: t.meta !== undefined
@@ -103,6 +107,7 @@ export function deserializeChars(
         c.tags = d.tags.map((t) => ({
             type: t.type,
             till: restoreTill(t.till as any),
+            at: t.at,
             source: t.source,
             // 保护描述重建为回调；其余按原样恢复
             meta: t.meta && typeof t.meta === 'object' && 'kind' in t.meta
@@ -140,6 +145,8 @@ export function saveGame(
     outsiderMax: number,
     currentMatchConfig: MatchConfig | null,
     initCounts: { villager: number; outsider: number; minion: number; demon: number },
+    weather?: WeatherType | null,
+    weatherRerolled?: boolean,
 ): void {
     const data: GameSaveData = {
         chars: serializeChars(chars),
@@ -157,6 +164,8 @@ export function saveGame(
         outsiderMax,
         currentMatchConfig: currentMatchConfig ? { ...currentMatchConfig } : null,
         initCounts: { ...initCounts },
+        weather: weather ?? null,
+        weatherRerolled: weatherRerolled ?? false,
         date: new Date().toISOString(),
     };
     try {

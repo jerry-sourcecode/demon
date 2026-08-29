@@ -96,18 +96,15 @@ export const useMatchStore = defineStore('match', () => {
         const allChars = [...chars.values()];
         const evilTotal = allChars.filter(c => isTrulyEvil(c)).length;
         const goodTotal = allChars.filter(c => !isTrulyEvil(c)).length;
-        const goodAlive = allChars.filter(c => !isTrulyEvil(c) && !c.hasTag(TagType.dead)).length;
+        const goodAlive = allChars.filter(c => !isTrulyEvil(c) && !c.isDead()).length;
 
-        const executedIds = new Set(
-            events
-                .filter(e => e.type === 'execute')
-                .map(e => (e.meta as any)?.target as number)
-                .filter(Boolean),
-        );
+        // 清除的邪恶 = 已死亡的邪恶玩家（活死人僵怖仍算存活，不计入）。
+        // 包含处决、流星雨等任何死因，而非仅统计处决事件。
         let evilExecuted = 0;
-        for (const id of executedIds) {
-            const c = chars.get(id);
-            if (c && isTrulyEvil(c)) evilExecuted++;
+        for (const c of allChars) {
+            if (isTrulyEvil(c) && c.isTrulyDead()) {
+                evilExecuted++;
+            }
         }
 
         const stats: MatchStats = {
@@ -131,7 +128,7 @@ export const useMatchStore = defineStore('match', () => {
             finalChars[id] = {
                 role: c.role,
                 alignment: c.alignment,
-                dead: c.hasTag(TagType.dead),
+                dead: c.isDead(),
                 deathType: (deadTag?.meta as any)?.type,
                 disguiseRole: disguiseTag?.meta as RoleType | undefined,
             };
