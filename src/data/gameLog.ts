@@ -83,8 +83,8 @@ interface GameEndMeta {
 
 interface ConfusedChangeMeta {
     action: 'add' | 'remove';
-    /** 施加者 ID */
-    source?: number;
+    /** 施加者 ID 或名称 */
+    source?: number | string;
     /** 施加者的角色（冻结快照） */
     sourceRole?: RoleType;
     /** 过期时间（仅 add 时有意义） */
@@ -176,11 +176,15 @@ export function addLog(
 }
 
 // ── 快捷添加函数 ──
+// 展示说明：①信息面板（右侧实时事件流）②复盘（GameOverModal 时间线）
+// 记号：✓显示 ✗隐藏
 
+/** 游戏开始（初始发牌）（信息面板✗ 复盘✓） */
 export function logGameStart(roles: Record<number, RoleType>): void {
     addLog('gameStart', 0, { roles });
 }
 
+/** 阶段切换（进入夜晚/黎明/白天/黄昏）（信息面板✓ 复盘✓） */
 export function logPhaseChange(): void {
     const dataStore = useDataStore();
     addLog('phaseChange', 0, {
@@ -188,74 +192,83 @@ export function logPhaseChange(): void {
     });
 }
 
+/** 回忆（信息面板✓ 复盘✓） */
 export function logRecall(target: number): void {
     addLog('recall', target, { target });
 }
 
+/** 处决（信息面板✓ 复盘✓） */
 export function logExecute(target: number, alreadyDead: boolean = false): void {
     addLog('execute', 0, { target, alreadyDead });
 }
 
+/** 死亡（信息面板✓[仅非处决死亡] 复盘✓） */
 export function logDeath(subject: number, cause: DeadReasonType): void {
     addLog('death', subject, { cause });
 }
 
+/** 伪装变更（信息面板✗ 复盘✓） */
 export function logDisguiseChange(subject: number, oldRole?: RoleType, newRole?: RoleType): void {
     addLog('disguiseChange', subject, { oldRole, newRole });
 }
 
+/** 声望变化（信息面板✓ 复盘✓） */
 export function logReputationChange(delta: number, reason: string): void {
     const dataStore = useDataStore();
     addLog('reputationChange', 0, { delta, reason, newValue: dataStore.reputation });
 }
 
-/** 记录主动技能发动（信息面板显示，复盘隐藏） */
+/** 主动技能发动（信息面板✓ 复盘✗） */
 export function logSkillActivate(subject: number): void {
     addLog('skillActivate', subject, {});
 }
 
+/** 技能结算（信息面板✗ 复盘✓） */
 export function logSkillResolution(subject: number, detail: string): void {
     const dataStore = useDataStore();
     const c = dataStore.chars.get(subject);
     const confused = c ? c.hasTag('confused' as any) : false;
-    const confusedBy = c ? (c.getTag('confused' as any)[0] as any)?.source as number | undefined : undefined;
+    const confusedBy = c ? (c.getTag('confused' as any)[0] as any)?.source as number | string | undefined : undefined;
     const disguiseTg = c?.getTag('disguise' as any)[0];
     const disguised = !!disguiseTg;
     const disguiseRole = disguiseTg?.meta as RoleType | undefined;
     addLog('skillResolution', subject, { detail, disguised, confused, confusedBy, disguiseRole, role: c?.role ?? 'unknown' as RoleType });
 }
 
+/** 游戏结束（信息面板✓ 复盘✓） */
 export function logGameEnd(win: boolean, reason?: string): void {
     const dataStore = useDataStore();
     addLog('gameEnd', 0, { win, reputation: dataStore.reputation, reason });
 }
 
+/** 混乱状态变化（信息面板✗ 复盘✓） */
 export function logConfusedChange(
     subject: number,
     action: 'add' | 'remove',
     role: RoleType,
-    source?: number,
+    source?: number | string,
     sourceRole?: RoleType,
     till?: Time.TimeNumber,
 ): void {
     addLog('confusedChange', subject, { action, role, source, sourceRole, till });
 }
 
+/** 天气改变（掷出/重掷）（信息面板✗ 复盘✓） */
 export function logWeatherChange(weather: WeatherType, action: 'roll' | 'reroll'): void {
     addLog('weatherChange', 0, { weather, action });
 }
 
-/** 记录一条天气告知信息（如雷暴揭示、双子月线索、血月选择等，显示在信息面板） */
+/** 天气告知信息（如雷暴揭示、双子月线索、血月选择等）（信息面板✓ 复盘✓） */
 export function logWeatherInfo(detail: string): void {
     addLog('weatherInfo', 0, { detail });
 }
 
-/** 记录一条天气日志（不显示在信息面板，仅用于复盘/诊断，如暴雨未命中） */
+/** 天气日志（隐藏，仅用于复盘/诊断，如暴雨未命中）（信息面板✗ 复盘✓） */
 export function logWeatherInfoHidden(detail: string): void {
     addLog('weatherInfo', 0, { detail, hidden: true });
 }
 
-/** 记录一条公开公告（显示在信息面板，明确告知玩家，如勒索者的目标） */
+/** 公开公告（明确告知玩家，如勒索者目标、痢蛭宿主死亡）（信息面板✓ 复盘✓） */
 export function logAnnouncement(detail: string): void {
     addLog('announcement', 0, { detail });
 }

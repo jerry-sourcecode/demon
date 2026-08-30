@@ -138,8 +138,8 @@ function applyDuskWeather(dataStore: ReturnType<typeof useDataStore>) {
         const till = Time.makeTime(Time.getDay(dataStore.time) + 1, Time.Phase.Dawn);
         dataStore.charList().forEach(x => {
             if (x.isTrulyEvil() && !x.isDead()) {
-                x.addTag(TagType.confused, { till, source: 0 });
                 logSkillResolution(x.id, '浓雾弥漫，你被::poisoned::直到下一个黎明。');
+                x.addTag(TagType.confused, { till, source: 0 });
             }
         });
     }
@@ -149,10 +149,10 @@ function applyDuskWeather(dataStore: ReturnType<typeof useDataStore>) {
         if (Math.random() < 0.3) {
             const target = randpick(kinds).items[0]!;
             const till = Time.makeTime(Time.getDay(dataStore.time) + 1, Time.Phase.Dusk);
-            target.addTag(TagType.confused, { till, source: 0 });
-            logSkillResolution(target.id, `暴雨：你被::drunk::直到下一个::dusk::。`);
+            logSkillResolution(target.id, `暴雨：被::drunk::直到下一个::dusk::。`);
+            target.addTag(TagType.confused, { till, source: '暴雨' });
         } else {
-            logWeatherInfoHidden(`暴雨倾盆，但无人被::drunk::。`);
+            logWeatherInfoHidden(`暴雨：当天无人::drunk::。`);
         }
     }
 }

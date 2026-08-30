@@ -62,17 +62,13 @@ const entries = computed<InfoEntry[]>(() => {
 		// ① 夜晚死亡整合：在"进入 黎明"后收集本次时段的所有死亡
 		// （死亡之间可能穿插 reputationChange/skillResolution 等伴随事件）
 		if (event.type === "phaseChange" && meta.phase === "黎明") {
-			const deaths: string[] = [];
+			const deathIds: number[] = [];
 			const repChanges: GameEvent[] = [];
 			let j = i + 1;
 			while (j < log.length) {
 				const next = log[j]!;
 				if (next.type === "death") {
-					deaths.push(
-						next.subject > 0
-							? getCharLabel(next.subject)
-							: `#${next.subject}`,
-					);
+					deathIds.push(next.subject);
 					j++;
 					continue;
 				}
@@ -87,6 +83,11 @@ const entries = computed<InfoEntry[]>(() => {
 				}
 				break; // 遇到其他事件终止收集
 			}
+			// 夜间死亡编号按玩家 id 升序排列
+			deathIds.sort((a, b) => a - b);
+			const deaths = deathIds.map((id) =>
+				id > 0 ? getCharLabel(id) : `#${id}`,
+			);
 			// 先输出黎明时段切换
 			result.push({
 				id: event.id,

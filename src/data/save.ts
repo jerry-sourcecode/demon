@@ -24,7 +24,7 @@ export interface CharSaveData {
     alignment: Alignment;
     info: string[];
     displayRole: RoleType;
-    tags: { type: TagType; till: Time.TimeNumber; at?: Time.TimeNumber; source?: number; meta?: any }[];
+    tags: { type: TagType; till: Time.TimeNumber; at?: Time.TimeNumber; source?: number | string; meta?: any }[];
     customTags: string[];
     dynamicTags: string[];
     skillUses: [string, { used: number; max: number }][];

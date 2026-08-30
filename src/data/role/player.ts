@@ -57,8 +57,7 @@ export const playerRoles: Record<PlayerRoleType, IPlayerRole> = {
             const canKill = !!lleech && !lleech.isDead() && lleech.isAwake('Lleech');
             const hostId = lleech ? playerData.get(lleech.id) : undefined;
             if (canKill && hostId && obj.id === hostId) {
-                logSkillResolution(lleech.id, `宿主 #${hostId}（::${obj.role}::）被玩家杀死。`);
-                obj.addTag('dead', { meta: { type: 'demon' } });
+                obj.addTag('dead', { meta: { type: 'other' } });
                 return true;
             }
 

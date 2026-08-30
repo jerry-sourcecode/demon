@@ -231,10 +231,7 @@
 						class="ai-test-item">
 						<span class="ai-test-label">{{ item.label }}</span>
 						<span :class="item.ok ? 'ok' : 'bad'">
-							{{ item.answer || "（无回答）" }}
-							<template v-if="!item.ok">
-								（期望 {{ item.expected }}）
-							</template>
+							{{ item.ok ? item.points : 0 }} / {{ item.points }}
 						</span>
 					</div>
 				</template>
@@ -520,8 +517,6 @@ const aiTestItems = ref<
 	{
 		label: string;
 		points: number;
-		answer: string;
-		expected: string;
 		ok: boolean;
 	}[]
 >([]);
@@ -585,29 +580,21 @@ async function onTestAi() {
 			{
 				label: "数学计算",
 				points: 30,
-				answer: String(parsed.math ?? ""),
-				expected: "386",
 				ok: parsed.math === 386,
 			},
 			{
 				label: "回文判断",
 				points: 20,
-				answer: String(parsed.palindrome ?? ""),
-				expected: "true",
 				ok: parsed.palindrome === true,
 			},
 			{
 				label: "逻辑推理",
 				points: 30,
-				answer: String(parsed.truth_teller ?? ""),
-				expected: "乙",
 				ok: parsed.truth_teller === "乙",
 			},
 			{
 				label: "字符索引",
 				points: 20,
-				answer: String(parsed.letter ?? ""),
-				expected: "e",
 				ok: parsed.letter === "e",
 			},
 		];

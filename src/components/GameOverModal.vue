@@ -931,7 +931,7 @@ function formatEventDetail(event: GameEvent): string {
 			if (meta.disguised && meta.disguiseRole)
 				sp += `（伪装：::${meta.disguiseRole}::）`;
 			if (meta.confused && meta.confusedBy)
-				sp += `【::confused:: 来自#${meta.confusedBy}】`;
+				sp += `【::confused:: 来自${typeof meta.confusedBy === "string" ? meta.confusedBy : `#${meta.confusedBy}`}】`;
 			else if (meta.confused) sp += `（::confused::）`;
 			return `${sp}：${meta.detail ?? ""}`;
 		}
@@ -947,12 +947,16 @@ function formatEventDetail(event: GameEvent): string {
 						? `，持续到 ${Time.getTimeString(meta.till)}`
 						: "";
 				const sourceStr = meta.source
-					? `，施加者：#${meta.source}（::${meta.sourceRole ?? "unknown"}::）`
+					? typeof meta.source === "string"
+						? `，施加者：${meta.source}`
+						: `，施加者：#${meta.source}（::${meta.sourceRole ?? "unknown"}::）`
 					: "";
 				return `#${event.subject}（::${cr}::）开始::confused::${tillStr}${sourceStr}`;
 			} else {
 				const sourceStr = meta.source
-					? `来自 #${meta.source}（::${meta.sourceRole ?? "unknown"}::）的`
+					? typeof meta.source === "string"
+						? `来自 ${meta.source}的`
+						: `来自 #${meta.source}（::${meta.sourceRole ?? "unknown"}::）的`
 					: "";
 				return `#${event.subject}（::${cr}::）${sourceStr}::confused::被清除`;
 			}

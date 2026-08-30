@@ -37,7 +37,7 @@ export const demonRoles = {
             const dataStore = useDataStore();
             if (Time.getDay(t) < 2) return;
             if (!c.isAwake('Imp')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             const target = pickGood(dataStore.charList())[0];
@@ -64,7 +64,7 @@ export const demonRoles = {
                         logSkillResolution(c.id, `死亡后，#${successor.id}（::${oldRole}::）变成了新的小恶魔。`);
                     }
                 } else {
-                    logSkillResolution(c.id, '由于神志不清，死亡后没有爪牙继承。');
+                    logSkillResolution(c.id, '由于::confused::，死亡后没有爪牙继承。');
                 }
             }
         },
@@ -105,7 +105,7 @@ export const demonRoles = {
             }
 
             if (!c.isAwake('Pukka')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
 
@@ -149,7 +149,7 @@ export const demonRoles = {
             if (Time.getDay(t) < 2) return;
 
             if (!c.isAwake('Po')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
 
@@ -202,7 +202,7 @@ export const demonRoles = {
             if (storedId === 0) {
                 if (!c.isAwake('Vigormortis')) {
                     playerData.set(c.id, -1);  // 永久标记：混乱导致能力流失
-                    logSkillResolution(c.id, '由于神志不清，爪牙能力永久流失。');
+                    logSkillResolution(c.id, '由于::confused::，爪牙能力永久流失。');
                     return;
                 }
                 const deadMinion = dataStore.charList().find(
@@ -223,7 +223,7 @@ export const demonRoles = {
                     );
                     if (adjacent.length > 0) {
                         const victim = randpick(adjacent).items[0]!;
-                        logSkillResolution(c.id, `#${deadMinion.id} 死亡后，#${victim.id} 中毒。`);
+                        logSkillResolution(c.id, `#${deadMinion.id} 死亡后，#${victim.id} ::poisoned::。`);
                         victim.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
                     }
                     logSkillResolution(c.id, `#${deadMinion.id} 保留了能力，今晚暂停杀戮。`);
@@ -232,7 +232,7 @@ export const demonRoles = {
 
             // 后续夜的混乱检查
             if (!c.isAwake('Vigormortis')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
 
@@ -274,14 +274,14 @@ export const demonRoles = {
                 if (host) {
                     playerData.set(c.id, host.id);// 打上宿主标记：击杀选择时按外来者同级处理（不优先击杀，保护痢蛭免疫）
                     host.addTag(TagType.unfavored, { source: c.id }); host.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
-                    logSkillResolution(c.id, `选择了 #${host.id}（::${host.role}::）作为宿主并使其中毒。`);
+                    logSkillResolution(c.id, `选择了 #${host.id}（::${host.role}::）作为宿主并使其::poisoned::。`);
                 }
                 return;
             }
 
             // 非首夜：随机一名存活善良玩家（镇民优先）死亡
             if (!c.isAwake('Lleech')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             const target = pickGood(dataStore.charList())[0];
@@ -329,7 +329,7 @@ export const demonRoles = {
 
             // 非首夜：随机一名存活善良玩家（镇民优先）死亡
             if (!c.isAwake('Zombuul')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             const target = pickGood(dataStore.charList())[0];
@@ -363,7 +363,7 @@ export const demonRoles = {
         summery: '“彼因汝之罪孽，吾已嗅汝之恶臭满溢全身。时日曷丧？予及汝皆亡。竖子命如草芥，以吾之力，使汝终末于深海，终于此良夜。”',
         ability: '::nfNight::，会有一名玩家（::villager::优先）：他死亡。与你邻近的两名::villager::::poisoned::。',
         abnormal: {
-            overall: "不会有玩家死亡，也不会有人中毒。",
+            overall: "不会有玩家死亡，也不会有人::poisoned::。",
         },
         nightActionPriority() {
             return 1;
@@ -373,7 +373,7 @@ export const demonRoles = {
             const day = Time.getDay(t);
 
             if (!c.isAwake('NoDashi')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
 
@@ -385,7 +385,7 @@ export const demonRoles = {
                     v.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
                 }
                 if (victims.length > 0) {
-                    logSkillResolution(c.id, `使邻近的::villager:: #${victims.map(v => v.id).join('、#')} 中毒。`);
+                    logSkillResolution(c.id, `使邻近的::villager:: #${victims.map(v => v.id).join('、#')} ::poisoned::。`);
                 }
             }
 
@@ -425,7 +425,7 @@ export const demonRoles = {
             if (day === 1) return; // 首夜不行动
 
             if (!c.isAwake('Obliterator')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
 

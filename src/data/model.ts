@@ -21,7 +21,7 @@ type TypedTag<T extends TagType = TagType> = {
     [K in T]: {
         type: K;
         till: Time.TimeNumber;
-        source?: number;
+        source?: number | string;
         /** 生效时间：标签延迟到该时间才生效。缺省=立即生效；到点前视为未生效 */
         at?: Time.TimeNumber;
     } & ([TagMetaMap[K]] extends [undefined]
@@ -180,7 +180,7 @@ export class Character extends BaseCharacter {
     /** 添加 Tag，默认永久。meta 类型根据 type 自动推导 */
     addTag<T extends TagType>(
         type: T,
-        opts?: { till?: Time.TimeNumber; at?: Time.TimeNumber; count?: number; source?: number; force?: boolean }
+        opts?: { till?: Time.TimeNumber; at?: Time.TimeNumber; count?: number; source?: number | string; force?: boolean }
             & ([TagMetaMap[T]] extends [undefined] ? { meta?: undefined } : { meta?: TagMetaMap[T] }),
     ): void {
         const till = opts?.till ?? Time.FAR_FUTURE;

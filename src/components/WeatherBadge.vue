@@ -19,7 +19,7 @@
 						size="tiny"
 						type="primary"
 						@click="onBloodmoon">
-						血月：选择玩家醉酒
+						血月：选择玩家::drunk::
 					</NButton>
 					<NButton
 						v-if="showMeteor"
@@ -78,7 +78,7 @@ const isMeteorDisabled = computed(
 async function onBloodmoon() {
 	const chosen = await emitter.emit("select-player", {
 		count: 1,
-		info: "血月：选择一名玩家，他醉酒直到下一个黎明。",
+		info: "血月：选择一名玩家，他::drunk::直到下一个黎明。",
 		required: true,
 	});
 	if (!chosen || chosen.length < 1) return;
@@ -90,7 +90,7 @@ async function onBloodmoon() {
 	target.addTag(TagType.confused, { till, source: 0 });
 	dataStore.bloodmoonUsedToday = true;
 	logWeatherInfo(`血月选择了 #${target.id}，他::drunk::直到下一个::dawn::。`);
-	message.success(`血月：#${target.id} 醉酒直到下一个黎明`);
+	message.success(`血月：#${target.id} ::drunk::直到下一个黎明`);
 }
 
 /** 流星雨：召唤流星砸向一名玩家，天罚或天怒 */

@@ -293,7 +293,7 @@ export function f4HandleNotAwake(c: Character, faction: Faction, countMin: numbe
     else if (roll <= 90) { doRandomWrong(); }
     else if (countMin === 0) {
         c.info.push(zeroMsg);
-        logSkillResolution(c.id, `得知${zeroMsg}（神志不清）`);
+        logSkillResolution(c.id, `得知${zeroMsg}（::confused::）`);
     } else if (!doDisguise()) doRandomWrong();
 }
 

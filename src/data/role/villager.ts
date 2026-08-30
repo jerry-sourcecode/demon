@@ -175,7 +175,7 @@ export const villagerRoles = {
                 c.info.push(`我原来是${RoleMap[c.getTag(TagType.farmer)[0]!.meta].display}`)
             }
             if (!c.isAwake('Farmer')) {
-                logSkillResolution(c.id, '由于神志不清，未能传承。');
+                logSkillResolution(c.id, '由于::confused::，未能传承。');
                 return;
             }
             if (randint(1, 4) === 1) {
@@ -692,7 +692,7 @@ export const villagerRoles = {
                 c.info.push(`我问说书人：「${question}」\n回答：${finalAnswer}`);
                 logSkillResolution(
                     c.id,
-                    `询问：「${question}」→ ${parsed.answer}${parsed.reason ? `（原因：${parsed.reason}）` : ''}${!c.isAwake('Artist') ? `（神志不清，已反转为${finalAnswer}）` : ''}`,
+                    `询问：「${question}」→ ${parsed.answer}${parsed.reason ? `（原因：${parsed.reason}）` : ''}${!c.isAwake('Artist') ? `（::confused::，已反转为${finalAnswer}）` : ''}`,
                 );
                 return true;
             }
@@ -754,7 +754,7 @@ export const villagerRoles = {
                 advice = answer?.trim() ?? '（说书人沉默不语）';
             }
 
-            const statusTag = !c.isAwake('Fisherman') ? '（神志不清，获得误导性建议）' : '';
+            const statusTag = !c.isAwake('Fisherman') ? '（::confused::，获得误导性建议）' : '';
             c.info.push(`说书人的建议：${advice}`);
             logSkillResolution(
                 c.id,
@@ -825,7 +825,7 @@ export const villagerRoles = {
             c.info.push(`在${Time.getTimeString(t)}，保护了 #${chosen[0]!.id}。`);
 
             if (!c.isAwake('Monk')) {
-                logSkillResolution(c.id, `选择了 #${chosen[0]!.id}，但是由于神志不清，技能未能生效。`);
+                logSkillResolution(c.id, `选择了 #${chosen[0]!.id}，但是由于::confused::，技能未能生效。`);
                 return;
             }
 
@@ -840,7 +840,7 @@ export const villagerRoles = {
     Innkeeper: {
         display: '旅店老板',
         faction: Faction.villager,
-        ability: '::nfNight::，你要选择两名玩家：他们当晚不会死亡，但其中一人会醉酒到下个::dusk::。',
+        ability: '::nfNight::，你要选择两名玩家：他们当晚不会死亡，但其中一人会::drunk::到下个::dusk::。',
         abnormal: {
             overall: "你仍需要选择玩家，但技能不会生效。"
         }, nightActionPriority() {
@@ -852,7 +852,7 @@ export const villagerRoles = {
             const emitter = useEmitter();
             const chosen = await emitter.emit('select-player', {
                 count: 2,
-                info: '::Innkeeper::：选择两名玩家，他们今晚不会死亡，但其中一人会醉酒。',
+                info: '::Innkeeper::：选择两名玩家，他们今晚不会死亡，但其中一人会::drunk::。',
                 required: true,
             });
             if (!chosen || chosen.length < 2) return;
@@ -864,18 +864,18 @@ export const villagerRoles = {
             c.info.push(`在${Time.getTimeString(t)}，保护了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，其中一人会::drunk::。`);
 
             if (!c.isAwake('Innkeeper')) {
-                logSkillResolution(c.id, `选择了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，但是由于神志不清，技能未能生效。`);
+                logSkillResolution(c.id, `选择了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，但是由于::confused::，技能未能生效。`);
                 return;
             }
 
             // 保护两名玩家当夜免疫死亡
             const till = Time.makeTime(Time.getDay(t), Time.Phase.Dawn);
 
-            // 随机一人醉酒到下个黄昏
+            // 随机一人::drunk::到下个黄昏
             const drunk = randpick(chosen).items[0]!;
 
             logSkillResolution(c.id,
-                `保护了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，#${drunk.id} 醉酒`);
+                `保护了 #${chosen[0]!.id} 和 #${chosen[1]!.id}，#${drunk.id} ::drunk::`);
             drunk.addTag(TagType.confused, {
                 till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
                 source: c.id,
@@ -1153,7 +1153,7 @@ export const villagerRoles = {
             if (dtype !== 'demon' && dtype !== 'assassin') return;
 
             if (!c.isAwake('Sage')) {
-                logSkillResolution(c.id, '由于神志不清，未能得知凶手。');
+                logSkillResolution(c.id, '由于::confused::，未能得知凶手。');
                 return;
             }
 

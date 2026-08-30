@@ -23,7 +23,7 @@ export const minionRoles = {
         onNightSkill(c, t) {
             function fn(obj: Character) {
                 if (!obj.isTrulyEvil()) {
-                    logSkillResolution(c.id, `使得#${obj?.id}（::${obj?.role}::）::poisoned::。`)
+                    logSkillResolution(c.id, `使得 #${obj?.id}（::${obj?.role}::）::poisoned::。`)
                     obj.addTag(TagType.confused, {
                         till: Time.makeTime(Time.getDay(t), Time.Phase.Dusk),
                         source: c.id,
@@ -36,7 +36,7 @@ export const minionRoles = {
                 fn(nearestAlive(c, 'cw')!);
                 fn(nearestAlive(c, 'ccw')!);
             } else {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
             }
         },
     },
@@ -73,7 +73,7 @@ export const minionRoles = {
                     meta: { force: true, type: 'assassin' },
                 })
             } else {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
             }
         },
     },
@@ -95,7 +95,7 @@ export const minionRoles = {
         onNightSkill(c, t) {
             const dataStore = useDataStore();
             if (!c.isAwake('DemonAdvocate')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             const prevId = playerData.get(c.id) ?? 0;
@@ -170,7 +170,7 @@ export const minionRoles = {
         onNightSkill(c, t) {
             const dataStore = useDataStore();
             if (!c.isAwake('GodFather')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             const deadOutsiders = dataStore.charList().filter(
@@ -219,7 +219,7 @@ export const minionRoles = {
             // 死于处决时，若场上没有剩余的邪恶玩家，邻近目标转变为邪恶阵营
             if (tg.type === TagType.dead && (tg.meta as any)?.type === 'execute') {
                 if (!c.isAwake('Vixen')) {
-                    logSkillResolution(c.id, '由于神志不清，目标未转变为邪恶阵营。');
+                    logSkillResolution(c.id, '由于::confused::，目标未转变为邪恶阵营。');
                     return;
                 }
                 const dataStore = useDataStore();
@@ -254,7 +254,7 @@ export const minionRoles = {
         onNightSkill(c, t) {
             const dataStore = useDataStore();
             if (!c.isAwake('Seducer')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             // 随机一名存活善良玩家，使其被视为邪恶直到下一个黎明（误导信息，甚至引导处决自己人）
@@ -282,7 +282,7 @@ export const minionRoles = {
         onNightSkill(c, t) {
             const dataStore = useDataStore();
             if (!c.isAwake('Extortionist')) {
-                logSkillResolution(c.id, '由于神志不清，技能未能生效。');
+                logSkillResolution(c.id, '由于::confused::，技能未能生效。');
                 return;
             }
             // 随机一名存活玩家，次日无法发动主动技能、也无法被处决

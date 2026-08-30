@@ -3,7 +3,7 @@ import { Time } from "../utils/time";
 import { RoleMap, type Character, type DeadReasonType, type RoleType } from "./model";
 import { NIGHT_CAUSES } from "./constants";
 import { useDataStore } from "@/store/value";
-import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution, logConfusedChange, logWeatherInfo, logWeatherChange, logWeatherInfoHidden } from "./gameLog";
+import { logDeath, logDisguiseChange, logReputationChange, logSkillResolution, logConfusedChange, logWeatherInfo, logWeatherChange, logWeatherInfoHidden, logSkillActivate, logAnnouncement } from "./gameLog";
 
 export const TagType = {
     /** 死亡 */
@@ -50,8 +50,8 @@ export interface ITag {
     type: TagType;
     /** 过期时间（Time.TIME_FAR_FUTURE 表示永久） */
     till: Time.TimeNumber;
-    /** 施加者 ID（可选） */
-    source?: number;
+    /** 施加者 ID 或名称（可选）。数字为玩家 id；字符串为外部来源名称（如“暴雨”） */
+    source?: number | string;
     /** 生效时间：标签延迟到该时间才生效。缺省=立即生效；到点前视为未生效 */
     at?: Time.TimeNumber;
     /** 额外信息（可选） */
@@ -112,7 +112,7 @@ export function isProtected(c: Character, cause: DeadReasonType): number {
     for (const t of c.getTag(TagType.protect)) {
         const fn = t.meta as unknown as ProtectFn;
         if (typeof fn === 'function' && fn(cause, c)) {
-            return t.source ?? -1;
+            return typeof t.source === 'number' ? t.source : -1;
         }
     }
     return -1;
@@ -155,19 +155,34 @@ export function settleDeath(c: Character, tg: ITag): void {
     logDeath(c.id, type);
     // 月食：仅夜间死亡（恶魔/爪牙等夜间死因）不产生声望降低
     const eclipseNight = data.weather === 'eclipse' && NIGHT_CAUSES.includes(type);
+    // 痢蛭宿主识别：拥有 unfavored 标签且来源为痢蛭（区别于狐妖的 unfavored 目标）
+    const isLleechHost = c.getTag(TagType.unfavored).some((t) => {
+        const src = typeof t.source === 'number' ? data.chars.get(t.source) : undefined;
+        return src?.role === 'Lleech';
+    });
     // 以真实阵营判定（tempted/隐士仅影响信息，不应影响声望结算）
     if (!c.isTrulyEvil() && !eclipseNight) {
-        // 处决 -5，死于非命 -2（修复：此前 -3 只加在日志 delta，未真正扣除）
-        const penalty = type === 'execute' ? 5 : 2;
-        data.reputation -= penalty;
-        repDelta = data.reputation - repBefore;
-        logReputationChange(repDelta, type === 'execute' ? `#${c.id} 被处决` : `#${c.id} 死于非命`);
+        if (type === 'execute') {
+            // 处决 -5
+            data.reputation -= 5;
+            data.reputation = Math.max(0, data.reputation);
+            repDelta = data.reputation - repBefore;
+            logReputationChange(repDelta, `#${c.id} 被处决`);
+        } else if (isLleechHost && type === 'other') {
+            // 痢蛭宿主被玩家技能杀死（死因 other）：不损失"死于非命"的 2 点声望
+            logAnnouncement(`#${c.id} 是痢蛭宿主，其被玩家选中，死亡。`);
+        } else {
+            // 死于非命 -2（修复：此前 -3 只加在日志 delta，未真正扣除）
+            data.reputation -= 2;
+            repDelta = data.reputation - repBefore;
+            logReputationChange(repDelta, `#${c.id} 死于非命`);
+        }
     } else if (!c.isTrulyEvil()) {
         logWeatherInfo(`#${c.id} 死于夜晚，但月食豁免了声望降低。`);
     }
 
     c.getTag(TagType.grandson).forEach(gt => {
-        const grandma = data.chars.get(gt.source!);
+        const grandma = typeof gt.source === 'number' ? data.chars.get(gt.source) : undefined;
         if (grandma?.isAwake('Grandma')) {
             logSkillResolution(grandma.id, `因为过度思念而殉情。`);
             grandma.addTag(TagType.dead);
@@ -307,7 +322,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             if (c.getTagCount(TagType.confused) === 1) {
                 const dataStore = useDataStore();
                 const source = tag.source;
-                const sourceC = source ? dataStore.chars.get(source) : undefined;
+                const sourceC = typeof source === 'number' ? dataStore.chars.get(source) : undefined;
                 logConfusedChange(
                     c.id,
                     'add',
@@ -325,7 +340,7 @@ export const TAG_RULES: Partial<Record<TagType, TagRule>> = {
             if (totalConfused === 1) {
                 const dataStore = useDataStore();
                 const source = tag.source;
-                const sourceC = source ? dataStore.chars.get(source) : undefined;
+                const sourceC = typeof source === 'number' ? dataStore.chars.get(source) : undefined;
                 logConfusedChange(
                     c.id,
                     'remove',

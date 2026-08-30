@@ -166,8 +166,8 @@ export const outsiderRoles = {
             ).items[0];
             if (drunk && c.isAwake('Puzzlemaster')) {
                 playerData.set(c.id, drunk.id);
+                logSkillResolution(c.id, `#${drunk.id}（::${drunk.role}::）::drunk::。`);
                 drunk.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
-                logSkillResolution(c.id, `#${drunk.id}（::${drunk.role}::）醉酒。`);
             }
         },
         canActivateSkill(c, t) {
@@ -177,7 +177,7 @@ export const outsiderRoles = {
             const emitter = useEmitter();
             const x = await emitter.emit('select-player', {
                 count: 1,
-                info: '::Puzzlemaster::：猜测谁是那名醉酒的玩家。',
+                info: '::Puzzlemaster::：猜测谁是那名::drunk::的玩家。',
             });
             if (!x || x.length < 1) return false;
             c.useSkill('skill');
@@ -190,7 +190,7 @@ export const outsiderRoles = {
                 cryptoWrongInfo(c, '没有可揭示的邪恶玩家');
                 return true;
             }
-            cryptoWrongInfo(c, guessedRight ? '猜测正确但神志不清' : '猜错了');
+            cryptoWrongInfo(c, guessedRight ? '猜测正确但::confused::' : '猜错了');
             return true;
         },
     },
@@ -206,7 +206,7 @@ export const outsiderRoles = {
             if (c.isAwake('SweetHeart') && tg.type === TagType.dead) {
                 const villager = getFactionChars(Faction.villager, { alive: true, count: 1 })[0];
                 if (villager) {
-                    logSkillResolution(c.id, `由于::SweetHeart::死亡，#${villager.id}（::${villager.role}::）醉酒。`);
+                    logSkillResolution(c.id, `由于::SweetHeart::死亡，#${villager.id}（::${villager.role}::）::drunk::。`);
                     villager.addTag(TagType.confused, { till: Time.FAR_FUTURE, source: c.id });
                 }
             }
